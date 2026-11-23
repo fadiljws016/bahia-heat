@@ -376,6 +376,64 @@ function prop(kind, x, z, heading = 0) {
   return grp;
 }
 
+// city.js's face tables (not exported); the balcony math below mirrors
+// buildCityMeshes exactly, so the boxes land on the built geometry.
+const SHOT_FACE_NORMAL = { S: [0, -1], N: [0, 1], W: [-1, 0], E: [1, 0] };
+const SHOT_FACE_ANGLE = { S: Math.PI, N: 0, W: -Math.PI / 2, E: Math.PI / 2 };
+
+/** The world box of one balcony assembly (slab + rail) from city data. */
+function balconyBox(b, bal) {
+  const [nx, nz] = SHOT_FACE_NORMAL[b.face];
+  const fx = b.cx + nx * (Math.abs(nx) > 0 ? b.w / 2 : 0) + (nx === 0 ? bal.off : 0);
+  const fz = b.cz + nz * (Math.abs(nz) > 0 ? b.d / 2 : 0) + (nz === 0 ? bal.off : 0);
+  const ry = SHOT_FACE_ANGLE[b.face];
+  const box = new THREE.Box3();
+  const corner = new THREE.Vector3();
+  const addPart = (w, h, d, px, py, pz) => {
+    const m = new THREE.Matrix4().makeRotationY(ry);
+    m.setPosition(px, py, pz);
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+      corner.set((sx * w) / 2, (sy * h) / 2, (sz * d) / 2).applyMatrix4(m);
+      box.expandByPoint(corner);
+    }
+  };
+  addPart(1.9, 0.12, 0.9, fx + nx * 0.45, bal.y, fz + nz * 0.45); // slab
+  addPart(1.9, 0.55, 0.06, fx + nx * 0.85, bal.y + 0.3, fz + nz * 0.85); // rail
+  return box;
+}
+
+/**
+ * Hide merged city geometry inside `box` for this staged scene only.
+ * The city batches are single world-space meshes — one prop cannot be
+ * removed from them — so every batch vertex inside the box is folded
+ * to the box's centre, degenerating those triangles to nothing. It
+ * runs inside this scene's page load; a fresh load rebuilds the city
+ * untouched, and the live game never stages a scene.
+ */
+function collapseBatchVerts(box) {
+  const cx = (box.min.x + box.max.x) / 2;
+  const cy = (box.min.y + box.max.y) / 2;
+  const cz = (box.min.z + box.max.z) / 2;
+  G.scene.updateMatrixWorld(true);
+  for (const obj of G.scene.children) {
+    if (!obj.isMesh || !obj.geometry || !obj.geometry.attributes.position) continue;
+    const e = obj.matrixWorld.elements;
+    // Only the merged batches live at the world origin; anything placed
+    // (people, cars, staged props) carries its position in its matrix.
+    if (Math.abs(e[12]) > 0.01 || Math.abs(e[13]) > 0.01 || Math.abs(e[14]) > 0.01) continue;
+    const pos = obj.geometry.attributes.position;
+    let touched = false;
+    for (let i = 0; i < pos.count; i += 1) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      if (x >= box.min.x && x <= box.max.x && y >= box.min.y && y <= box.max.y && z >= box.min.z && z <= box.max.z) {
+        pos.setXYZ(i, cx, cy, cz);
+        touched = true;
+      }
+    }
+    if (touched) pos.needsUpdate = true;
+  }
+}
+
 /**
  * Pose an officer AND turn his mesh toward the player. posePerson only
  * bends joints — it never rotates the group — so an officer staged with
@@ -426,8 +484,10 @@ function stageCombat(rng) {
   const cover = parkedCar('sedan', at.x - 0.6, at.z - 2.4, Math.PI / 2, 0x2f7fd0);
   cover.hp = 26;
   combatCoverCar = cover;
-  // Alley dressing fills the frame's edges.
-  prop('dumpster', at.x - 10.5, at.z + 1, 0.4);
+  // Alley dressing fills the frame's edges. (A green dumpster stood at
+  // the lens's right hand until the owner's cleanup pass — it filled
+  // the frame's right edge with a blank green wall, so it is no longer
+  // placed here. The crates stay.)
   prop('crates', at.x + 10, at.z - 4, 0.2);
   prop('crates', at.x - 1, at.z + 10.5, 1.1);
 
@@ -581,6 +641,27 @@ function stageCombat(rng) {
   // candidate seats, then verified from the captured frame — the
   // seats that stepped east without stepping back slid past the
   // runner and cropped him out of his own photograph).
+  // The owner's cleanup pass on this frame: the lens sits inside the
+  // corner house's footprint, so the two low balconies on that house's
+  // street face float in the picture as blank boards — one high at
+  // frame-centre, one sitting on the streetlight pole at centre-left
+  // (projection-measured: their rails land near x 660 and x 430). Both
+  // assemblies are folded out of the merged city batches for this
+  // scene (collapseBatchVerts); the pole itself stays, the balconies
+  // stay in the live game, and only the low pair within nine metres
+  // of the seat is touched — the same house's high balconies project
+  // above the frame and are left alone.
+  const seatX = at.x - 9.5, seatZ = at.z - 8.5;
+  for (const b of G.city.buildings) {
+    for (const bal of b.balconies) {
+      if (bal.y >= 5) continue;
+      const bb = balconyBox(b, bal);
+      const c = bb.getCenter(new THREE.Vector3());
+      if (Math.hypot(c.x - seatX, c.z - seatZ) > 9) continue;
+      bb.expandByScalar(0.06);
+      collapseBatchVerts(bb);
+    }
+  }
   stageCamera(at.x - 9.5, 2.7, at.z - 8.5, at.x + 1.2, 1.0, at.z + 2.8);
 }
 

@@ -23,6 +23,16 @@
 // Round three deepens the chart to match the graded world: a richer sea,
 // stronger district washes, a warmer land base — the map reads like the
 // city at golden hour, not a grey diagram.
+//
+// Owner polish pass (unrecorded revision): the chart learns its manners.
+// District washes firm up into six unmistakable territories, depth rings
+// shade the bay around the shore, the marina's eight moored boats sit at
+// their real berths beside the piers, courtyard-plaza hearts paint green
+// and parking slabs pale, and the big map gains glyphs for Marisol's
+// corner, Tito's race lights, the marina docks and the lighthouse — every
+// one of them named in the legend, every one a place the world really
+// has. A compass rose replaces the bare N. Nothing moves: same island,
+// same roads, same gold route.
 
 // Round seven moves no cartography: the combat frame's round minimap
 // still centres the alley in Viejo Puerto, and the drive frame's
@@ -40,12 +50,12 @@ let bigCtx = null;
 let bigCanvas = null;
 
 const DISTRICT_WASH = {
-  'El Faro': 'rgba(243,201,130,0.40)',
-  'Playa Brava': 'rgba(247,224,166,0.36)',
-  'Marina Alta': 'rgba(140,220,235,0.36)',
-  'Las Palmas': 'rgba(152,219,152,0.33)',
-  'Centro Alba': 'rgba(255,255,255,0.24)',
-  'Viejo Puerto': 'rgba(255,170,120,0.36)',
+  'El Faro': 'rgba(198,180,232,0.46)',
+  'Playa Brava': 'rgba(250,228,158,0.50)',
+  'Marina Alta': 'rgba(118,214,236,0.50)',
+  'Las Palmas': 'rgba(146,219,150,0.50)',
+  'Centro Alba': 'rgba(255,196,178,0.44)',
+  'Viejo Puerto': 'rgba(233,176,106,0.52)',
 };
 
 function paintStatic() {
@@ -63,6 +73,16 @@ function paintStatic() {
   sea.addColorStop(0.75, '#1f6390');
   sea.addColorStop(1, '#3583ac');
   g.fillStyle = sea; g.fillRect(0, 0, w, h);
+  // Depth shading: a pale shallow shelf hugging the shore, then fainter
+  // rings stepping out into the bay. The land fill below covers whatever
+  // falls inland, so only the water keeps the shading.
+  g.fillStyle = 'rgba(126,204,230,0.30)';
+  g.fillRect(X(-264), 0, (316 + 264) * SCALE, h);
+  const RINGS = [[22, 'rgba(170,222,246,0.26)'], [36, 'rgba(170,222,246,0.16)'], [54, 'rgba(170,222,246,0.09)']];
+  for (const [off, col] of RINGS) {
+    g.strokeStyle = col; g.lineWidth = 2;
+    g.strokeRect(X(-252 - off), Z(-340 - off), (544 + off * 2) * SCALE, (680 + off * 2) * SCALE);
+  }
   // Land, then the sand edge along Playa Brava.
   g.fillStyle = '#77805f'; g.fillRect(X(-252), 0, (292 + 252) * SCALE, h);
   g.fillStyle = '#ecd49c'; g.fillRect(X(-252), 0, 27 * SCALE, h);
@@ -71,13 +91,21 @@ function paintStatic() {
   for (const d of DISTRICTS) {
     g.fillStyle = DISTRICT_WASH[d.name] ?? 'rgba(255,255,255,0.12)';
     g.fillRect(X(d.minX), Z(d.minZ), (d.maxX - d.minX) * SCALE, (d.maxZ - d.minZ) * SCALE);
-    g.strokeStyle = 'rgba(255,250,235,0.4)';
-    g.lineWidth = 1.2;
+    g.strokeStyle = 'rgba(255,250,235,0.55)';
+    g.lineWidth = 1.4;
     g.strokeRect(X(d.minX), Z(d.minZ), (d.maxX - d.minX) * SCALE, (d.maxZ - d.minZ) * SCALE);
   }
-  // The plaza's green heart.
+  // Open blocks the city really leaves open: courtyard-plaza hearts in a
+  // planted green, parking slabs in pale asphalt.
+  for (const pz of G.city?.plazas ?? []) {
+    g.fillStyle = pz.parking ? 'rgba(216,211,200,0.55)' : 'rgba(96,164,84,0.50)';
+    g.fillRect(X(pz.minX), Z(pz.minZ), (pz.maxX - pz.minX) * SCALE, (pz.maxZ - pz.minZ) * SCALE);
+  }
+  // The plaza's green heart, with the clock tower standing in it.
   g.fillStyle = '#5f9c4e';
   g.fillRect(X(PLACES.plaza.x - 15), Z(PLACES.plaza.z - 15), 30 * SCALE, 30 * SCALE);
+  g.fillStyle = '#e8d9b0';
+  g.fillRect(X(PLACES.clockTower.x - 2), Z(PLACES.clockTower.z - 2), 4 * SCALE, 4 * SCALE);
   // Roads: side streets pale, the boulevard a proud golden band.
   g.fillStyle = '#dcd9d0';
   for (const rx of ROADS_X) g.fillRect(X(rx) - (ROAD_WIDTH / 2) * SCALE, 0, ROAD_WIDTH * SCALE, h);
@@ -90,6 +118,16 @@ function paintStatic() {
   g.fillStyle = '#8a6844';
   for (let i = 0; i < 4; i += 1) g.fillRect(X(-259), Z(198 + i * 22), 26 * SCALE, 4 * SCALE);
   if (G.city?.pier) g.fillRect(X(G.city.pier.toX), Z(G.city.pier.z - 2.5), (G.city.pier.fromX - G.city.pier.toX) * SCALE, 5 * SCALE);
+  // The marina's moored boats, at the very berths city.js floats them:
+  // eight hulls west of the piers, white with their real trim colours.
+  const BOAT_TRIMS = ['#d84f35', '#2f7fd0', '#35b06f', '#f2b13c'];
+  for (let i = 0; i < 8; i += 1) {
+    const bx = -254 - (i % 3) * 7.5, bz = 194 + i * 12.5;
+    g.fillStyle = '#f0ede6';
+    g.beginPath(); g.roundRect(X(bx - 1.6), Z(bz - 4), 3.2 * SCALE, 8 * SCALE, 2); g.fill();
+    g.fillStyle = BOAT_TRIMS[i % 4];
+    g.fillRect(X(bx - 1.7), Z(bz - 0.4), 3.4 * SCALE, 0.8 * SCALE);
+  }
   // The Ferris wheel: a little ring on the beach.
   if (G.city?.ferris) {
     g.strokeStyle = '#ffcf5e'; g.lineWidth = 2;
@@ -361,8 +399,14 @@ export function drawBigMap() {
   drawBadge(g, toMap(PLACES.garagePad.x, PLACES.garagePad.z), '#e8862e', 'G');
   drawShield(g, toMap(PLACES.policeStation.x, PLACES.policeStation.z));
   drawCross(g, toMap(PLACES.hospital.x, PLACES.hospital.z));
-  // The lighthouse point itself is already painted on the static layer, and
-  // the district label names it — no second caption crowding the corner.
+  // The people and places the story actually turns on: Marisol's corner
+  // (her own gold, from story.js), Tito's race lights under a chequered
+  // flag, an anchor on the Marina del Sur docks, and the lighthouse drawn
+  // as a lighthouse where the static layer's dot already marks the point.
+  drawBadge(g, toMap(PLACES.marisolCorner.x, PLACES.marisolCorner.z), '#ffb340', 'M', '#503a08');
+  drawFlag(g, toMap(PLACES.raceStart.x, PLACES.raceStart.z));
+  drawAnchor(g, toMap(PLACES.marinaDock.x, PLACES.marinaDock.z));
+  drawLighthouse(g, toMap(PLACES.lighthouse.x, PLACES.lighthouse.z));
 
   // The objective diamond + its distance pill.
   const marker = drawObjective(g, toMap, toMap, true);
@@ -389,25 +433,92 @@ export function drawBigMap() {
   g.beginPath(); g.arc(pxx, pyy, 9, 0, Math.PI * 2); g.stroke();
   drawPlayerArrow(g, pxx, pyy, G.player.heading, 1.35);
 
-  // North arrow, top-right of the chart.
-  g.fillStyle = 'rgba(255,248,234,0.9)';
-  g.font = '700 13px "Segoe UI", Arial, sans-serif';
-  g.fillText('N', ox + mapW - 16, oy + 20);
-  g.beginPath();
-  g.moveTo(ox + mapW - 16, oy + 26); g.lineTo(ox + mapW - 11, oy + 38); g.lineTo(ox + mapW - 21, oy + 38);
-  g.closePath(); g.fill();
+  // Compass rose, top-right of the chart: a glass disc, a two-tone
+  // needle (red flies north), and the N riding above it.
+  const ccx = ox + mapW - 27, ccy = oy + 31;
+  g.save();
+  g.fillStyle = 'rgba(10,16,24,0.55)';
+  g.beginPath(); g.arc(ccx, ccy, 14, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = 'rgba(255,248,234,0.5)';
+  g.lineWidth = 1;
+  g.stroke();
+  g.beginPath(); g.moveTo(ccx, ccy - 10); g.lineTo(ccx + 3.4, ccy); g.lineTo(ccx - 3.4, ccy); g.closePath();
+  g.fillStyle = '#ff5a3c'; g.fill();
+  g.beginPath(); g.moveTo(ccx, ccy + 10); g.lineTo(ccx + 3.4, ccy); g.lineTo(ccx - 3.4, ccy); g.closePath();
+  g.fillStyle = 'rgba(255,248,234,0.85)'; g.fill();
+  g.fillStyle = '#fff8ea';
+  g.font = '700 10px "Segoe UI", Arial, sans-serif';
+  g.fillText('N', ccx, ccy - 17);
+  g.restore();
 }
 
-function drawBadge(g, [mx, my], color, letter) {
+function drawBadge(g, [mx, my], color, letter, letterColor = '#ffffff') {
   g.save();
   g.fillStyle = color;
   g.strokeStyle = 'rgba(255,255,255,0.9)';
   g.lineWidth = 1.4;
   g.beginPath(); g.arc(mx, my, 8, 0, Math.PI * 2); g.fill(); g.stroke();
-  g.fillStyle = '#ffffff';
+  g.fillStyle = letterColor;
   g.font = '900 11px Arial, sans-serif';
   g.textAlign = 'center';
   g.fillText(letter, mx, my + 4);
+  g.restore();
+}
+
+function drawFlag(g, [mx, my]) {
+  g.save();
+  g.strokeStyle = 'rgba(15,20,26,0.85)';
+  g.lineWidth = 1.6;
+  g.beginPath(); g.moveTo(mx - 5, my + 7); g.lineTo(mx - 5, my - 7); g.stroke();
+  const fw = 11, fh = 8, fx = mx - 5, fy = my - 7, cell = fw / 3;
+  for (let r = 0; r < 2; r += 1) for (let c = 0; c < 3; c += 1) {
+    g.fillStyle = (r + c) % 2 === 0 ? '#20242a' : '#ffffff';
+    g.fillRect(fx + c * cell, fy + r * (fh / 2), cell, fh / 2);
+  }
+  g.strokeStyle = 'rgba(15,20,26,0.65)';
+  g.lineWidth = 1;
+  g.strokeRect(fx, fy, fw, fh);
+  g.restore();
+}
+
+function drawAnchor(g, [mx, my]) {
+  g.save();
+  g.fillStyle = '#175d7a';
+  g.strokeStyle = 'rgba(255,255,255,0.9)';
+  g.lineWidth = 1.4;
+  g.beginPath(); g.arc(mx, my, 8, 0, Math.PI * 2); g.fill(); g.stroke();
+  g.strokeStyle = '#ffffff';
+  g.lineWidth = 1.5;
+  g.lineCap = 'round';
+  g.beginPath(); g.arc(mx, my - 4.6, 1.7, 0, Math.PI * 2); g.stroke();
+  g.beginPath();
+  g.moveTo(mx, my - 2.9); g.lineTo(mx, my + 5.4);
+  g.moveTo(mx - 3.4, my - 0.6); g.lineTo(mx + 3.4, my - 0.6);
+  g.moveTo(mx - 4.6, my + 1.8); g.quadraticCurveTo(mx, my + 7.6, mx + 4.6, my + 1.8);
+  g.stroke();
+  g.restore();
+}
+
+function drawLighthouse(g, [mx, my]) {
+  g.save();
+  const tower = new Path2D();
+  tower.moveTo(mx - 2.4, my - 12); tower.lineTo(mx + 2.4, my - 12);
+  tower.lineTo(mx + 4.2, my); tower.lineTo(mx - 4.2, my);
+  tower.closePath();
+  g.save();
+  g.clip(tower);
+  g.fillStyle = '#ffffff'; g.fillRect(mx - 5, my - 12, 10, 12);
+  g.fillStyle = '#d8402e';
+  g.fillRect(mx - 5, my - 10, 10, 2.6);
+  g.fillRect(mx - 5, my - 5.4, 10, 2.6);
+  g.restore();
+  g.strokeStyle = 'rgba(10,18,28,0.55)';
+  g.lineWidth = 1;
+  g.stroke(tower);
+  g.fillStyle = '#26313d';
+  g.fillRect(mx - 2.8, my - 15.4, 5.6, 3.4);
+  g.fillStyle = '#ffd76a';
+  g.beginPath(); g.arc(mx, my - 13.7, 1.5, 0, Math.PI * 2); g.fill();
   g.restore();
 }
 
