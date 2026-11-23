@@ -1,20 +1,9 @@
 // traffic.js — the ordinary drivers of Puerto Alba: thirty-two cars
 // following the grid lane by lane, brake lights flaring in queues, turns
-// at intersections, and panic. Gunfire within earshot and the whole street
-// puts its foot down, horns blaring, which is exactly the chaos a chase
-// should plough through. Round eight leaves the grid alone too: the
-// chase photograph's boulevard traffic is this same staged flow, and
-// FALCON-1's lower pass over it is a pin in the staging, not a change
-// to how the city drives. Round three widens the panic radius a touch —
-// with the louder gunfights of the new combat pass, more of the street
-// reacts at once. Round six leaves the traffic alone: no staged frame
-// this round turns on a moving car, and the grid drives as it did.
-// hears them and runs. Round five leaves the thirty-two drivers to their
-// lanes — none of its notes (signage, smoke, facings) were about traffic.
-
-// Round seven stages no live traffic inside the combat frame and
-// changes none here: the tableau's moving chaos stays in the chase
-// shot, and the alley's cars are parked dressing from vehicles.js.
+// at intersections, and panic. Gunfire within earshot (a generous 42 m —
+// a crossfire should empty the whole block, not just the corner) and the
+// whole street puts its foot down, horns blaring, which is exactly the
+// chaos a chase should plough through.
 import { G } from './state.js';
 import { ROADS_X, ROADS_Z, BOULEVARD_X, randomRoadPoint } from './city.js';
 import { clamp, wrapAngle, dist2d, makeRng } from './util.js';
@@ -24,6 +13,17 @@ import { sfx } from './audio.js';
 const rng = makeRng(20240);
 const TARGET = 32;
 const TYPES = ['sedan', 'sedan', 'sedan', 'sport', 'taxi', 'truck'];
+const VERTICALS = [BOULEVARD_X, ...ROADS_X];
+
+/** The nearest cross-street line 2–30 m ahead along the travel direction. */
+function junctionAhead(lines, coord, dir) {
+  let found = null;
+  for (const line of lines) {
+    const d = (line - coord) * dir;
+    if (d > 2 && d < 30 && (found === null || d < found.d)) found = { line, d };
+  }
+  return found;
+}
 
 function spawnTraffic() {
   const pt = randomRoadPoint(rng);
@@ -85,11 +85,7 @@ export function updateTraffic(dt) {
     let targetHeading = car.heading;
     if (r.axis === 'z') {
       targetHeading = r.dir > 0 ? 0 : Math.PI;
-      let nextJunction = null;
-      for (const rz of ROADS_Z) {
-        const dz = (rz - car.z) * r.dir;
-        if (dz > 2 && dz < 30 && (nextJunction === null || dz < nextJunction.d)) nextJunction = { line: rz, d: dz };
-      }
+      const nextJunction = junctionAhead(ROADS_Z, car.z, r.dir);
       if (nextJunction && nextJunction.d < 9 && rng() < 0.012) {
         r.axis = 'x'; r.line = nextJunction.line;
         r.dir = rng() < 0.5 ? 1 : -1;
@@ -97,12 +93,7 @@ export function updateTraffic(dt) {
       }
     } else {
       targetHeading = r.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
-      const verticals = [BOULEVARD_X, ...ROADS_X];
-      let nextJunction = null;
-      for (const rx of verticals) {
-        const dx = (rx - car.x) * r.dir;
-        if (dx > 2 && dx < 30 && (nextJunction === null || dx < nextJunction.d)) nextJunction = { line: rx, d: dx };
-      }
+      const nextJunction = junctionAhead(VERTICALS, car.x, r.dir);
       if (nextJunction && nextJunction.d < 9 && rng() < 0.012) {
         r.axis = 'z'; r.line = nextJunction.line;
         r.dir = rng() < 0.5 ? 1 : -1;

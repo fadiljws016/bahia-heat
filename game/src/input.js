@@ -1,19 +1,11 @@
-// input.js — keyboard and mouse state. Systems poll `keys` for held buttons
-// and the edge-triggered `pressed` set for one-shot actions (interact,
-// weapon slots, map, pause). Mouse orbit deltas accumulate here for
-// camera.js; `mouse.clicked` is the edge of a left press, for semi-auto
-// fire; `wheelDelta` carries weapon cycling. Round eight asks nothing
-// of the controls — its work is staged scenes and a pinned hover —
-// so the polling contract below stands as it was. Pointer lock is requested by
-// main.js on canvas click during play; screenshot modes never lock and
-// drive the camera directly instead. Round three also keeps the browser
-// from scrolling on the wheel over the canvas — the arsenal cycle owns it.
-// Round six touches no input: the screenshot scenes it re-stages are
-// still driven entirely by shots.js, never by a held key.
-// Round five adds no controls; its captures were driven entirely through
-// the ?shot= URLs, pointer unlocked as ever.
-// Round seven touches no binding: screenshot modes still never lock
-// the pointer, and the staged scenes poll nothing from this file.
+// input.js — keyboard and mouse state, polled by the systems. `keys` is
+// the held set; `pressed` is the edge-triggered set for one-shot actions
+// (interact, weapon slots, map, pause), cleared by endFrame each frame.
+// Mouse orbit deltas accumulate here for camera.js; `mouse.clicked` is
+// the edge of a left press, for semi-auto fire; `wheelDelta` carries
+// weapon cycling, so the wheel over the canvas never scrolls the page.
+// Pointer lock is requested by main.js on canvas click during play;
+// screenshot modes never lock — shots.js drives the camera directly.
 
 export const input = {
   keys: new Set(),
@@ -38,8 +30,8 @@ export function initInput(canvas) {
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   });
   window.addEventListener('keyup', (e) => { input.keys.delete(e.code); });
-  // Losing focus also drops the accumulated orbit and wheel deltas: a
-  // stale mouseDX banked before an alt-tab would otherwise dump into the
+  // Losing focus also drops the banked orbit and wheel deltas: a stale
+  // mouseDX saved before an alt-tab would otherwise dump into the
   // camera as one hard snap on the first frame back.
   window.addEventListener('blur', () => {
     input.keys.clear(); input.mouse.down = false;

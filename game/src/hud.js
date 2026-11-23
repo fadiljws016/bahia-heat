@@ -1,28 +1,14 @@
-// hud.js — every DOM element over the canvas: mission panel, PAPD dispatch
-// board, wanted stars, weapon slots, vitals, vehicle readout, radio line,
-// dialogue box, toasts, banners, the bust meter, and the full-screen map's
-// header district. Systems write into G; this file paints. Round
-// eight paints nothing new either: the dispatch board already lists
-// every foot officer by distance, so the sixth man the staging adds
-// to the Palma Showdown simply takes his own FOOT line on the board,
-// and FALCON-1's AIR SUPPORT line already names the unit the chase
-// frame now shows in full. Round six
-// paints nothing new: the dispatch board and weapon slots carry into the
-// combat shot's new framing unchanged, and the cover's district label
-// still names the quarter the (now lower) fascia signs.
-//
-// Round three draws the arsenal: each weapon slot carries a side-profile
-// silhouette of its gun — the P-9's short slide, the Kobra's long magazine
-// and stock, the Muelle's thick barrel and pump — so the loadout reads at
-// a glance the way the modelled weapons read in the world.
-//
-// Round five changes nothing here: the dispatch board already reports
-// what the facing audit measured — FOOT units, their distances, ENGAGING.
-
-// Round seven is judged partly through this file's dispatch board:
-// the re-spread PAPD line now reports at 7 / 12 / 18 m beside the RAM
-// unit in the combat frame. Same panel, truer distances — no paint
-// changed.
+// hud.js — every DOM element over the canvas: mission panel, PAPD
+// dispatch board (every cruiser and foot officer by distance, plus
+// FALCON-1's AIR SUPPORT line), wanted stars, weapon slots, vitals,
+// vehicle readout, radio line, dialogue box, toasts, banners, the bust
+// meter, and the full-screen map's header district. Systems write into
+// G; this file paints, and it paints through a small text/html cache so
+// unchanged labels never touch the DOM twice. Each weapon slot carries
+// a side-profile silhouette of its gun — the P-9's short slide, the
+// Kobra's long magazine and stock, the Muelle's thick barrel and pump —
+// drawn from the same proportions as the modelled weapons in people.js,
+// so the loadout reads at a glance the way the guns read in the world.
 import { G, rankFor } from './state.js';
 import { formatDayTime, formatClock, clamp } from './util.js';
 import { missionPanelInfo } from './missions.js';

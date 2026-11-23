@@ -1,25 +1,17 @@
-// world.js — the stage itself: renderer, a painted gradient sky with a sun
-// glow and drifting clouds, the slow day cycle, the sea, palm avenues,
-// streetlights that glow at dusk, and the beach dressing. city.js builds the
-// streets and buildings; this file makes them feel like a golden-hour port —
-// lamp halos, a wet sheen on the boulevard after dark, and the Ferris wheel
-// turning over the bay. Round eight changes no light or grade: the
-// dusk FALCON-1 now hangs in is this file's same golden hour, and the
-// combat frame's warm 18:16 is the light it was always judged under. Round six changes no light or grade: the fascia's
-// clearance from the orange trim is geometry (city.js), and the warm
-// 18:15 light the combat frame is judged under is this file's, as was.
+// world.js — the stage itself: renderer, a painted gradient sky with a
+// sun glow and drifting clouds, the slow day cycle, the sea, palm
+// avenues, streetlights that glow at dusk, and the beach dressing.
+// city.js builds the streets and buildings; this file makes them feel
+// like a golden-hour port — lamp halos, a wet sheen on the boulevard
+// after dark, and the Ferris wheel turning over the bay.
 //
-// Round three is the grade: ACES filmic tone mapping over the whole frame,
-// a day palette pushed deeper and more saturated (azure into gold into
-// rose, with a painted band between zenith and horizon), a warm sun against
-// a cool blue hemisphere fill whose ground bounce warms at dusk, and less
-// ambient wash so shadows hold their contrast. Round five keeps this
-// grade untouched — it is the light the warmer, greyer gun smoke of the
-// effects pass was tuned against.
-
-// Round seven judges the mirrored combat frame under this file's
-// same 18:15 golden light — no sky, grade or lamp changes; only the
-// lens and the staging in shots.js moved.
+// The grade is this file's signature: ACES filmic tone mapping over
+// the whole frame, a day palette pushed deep and saturated (azure into
+// gold into rose, with a painted band between zenith and horizon), a
+// warm sun against a cool blue hemisphere fill whose ground bounce
+// warms at dusk, and little ambient wash so shadows hold their
+// contrast. The staged frames are judged under this same light — the
+// combat frame's warm 18:15 golden hour is this file's, unchanged.
 import { G } from './state.js';
 import { BOULEVARD_X, ROADS_X, ROADS_Z, CITY_BOUNDS, addCollider, streetlightSpots } from './city.js';
 import { makeRng, lerp, clamp } from './util.js';

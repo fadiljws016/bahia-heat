@@ -1,33 +1,32 @@
-// city.js — Puerto Alba's layout and its built form. The layout is pure data
-// (road lines, building boxes, districts, named places) generated once from
-// a fixed seed, so traffic, pedestrians, the minimap and the missions all
-// read the same map the player sees. Round eight builds nothing new:
-// the boulevard FALCON-1 now overflies in full and the Viejo Puerto
-// corner where a sixth officer takes his post are this same fixed
-// city, read by the staging exactly as the player reads it. Blocks are filled with rows of
-// small-lot buildings, every facade wears a painted window texture (lit
-// windows, shutters, AC boxes, storefronts), shops carry their names on an
-// atlas of signs, and roofs, balconies, awnings and street props are merged
-// or instanced so the city can be dense without drowning the renderer. The
-// Mercado del Puerto lines the promenade, and a Ferris wheel turns over
-// Playa Brava.
+// city.js — Puerto Alba's layout and its built form. The layout is pure
+// data (road lines, building boxes, districts, named places) generated
+// once from a fixed seed — buildCityData's rng draw order is part of
+// the city's identity, so the layout code never gains or loses a draw —
+// and traffic, pedestrians, the minimap and the missions all read the
+// same map the player sees. Blocks are filled with rows of small-lot
+// buildings, every facade wears a painted window texture (lit windows,
+// shutters, AC boxes, storefronts), shops carry their names on an atlas
+// of signs, and roofs, balconies, awnings and street props are merged
+// or instanced so the city can be dense without drowning the renderer.
+// The Mercado del Puerto lines the promenade, and a Ferris wheel turns
+// over Playa Brava.
 //
-// Round three paves the city: no large flat ground plane survives. The
-// asphalt is a painted canvas — aggregate speckle, patched cracks, tar
-// seams — the plazas and promenade are slab grids with grout and stains,
-// the beach ripples, and a clutter layer of paper, leaves, stones, painted
-// kerbs, tactile paving, drain grates and dusk puddles sits over it all.
-// The pastel palette deepens a step toward the grade in world.js.
+// No large flat ground plane survives: the asphalt is a painted canvas
+// — aggregate speckle, patched cracks, tar seams — the plazas and
+// promenade are slab grids with grout and stains, the beach ripples,
+// and a clutter layer of paper, leaves, stones, painted kerbs, tactile
+// paving, drain grates and dusk puddles sits over it all.
 //
-// Round four names the quarters in the world itself: a MARINA ALTA fascia
-// board over the market colonnade and a gateway sign at the way into every
-// other district, painted in the sign atlas's manner — district colours,
-// cream letters big enough to read from the street.
-
-// Round seven photographs the Callejón de las Redes shootout across
-// this file's fixed geometry: the deep crate stack stands on the
-// second-line officer's first sightline, and his re-spread in shots.js
-// is measured against the streets and props laid out here.
+// The quarters name themselves in the world itself: a MARINA ALTA
+// fascia board over the market colonnade — 11 m wide, centred z −9.8,
+// its face at y 3.30 with the lettering's headroom keeping the T of
+// ALTA clear of the orange roof trim above it — and a gateway sign at
+// the way into every other district, painted in the sign atlas's
+// manner. The street furniture keeps to the kerbs (streetlightSpots
+// slides intersection lamps to the corner), the avenue parking sits in
+// the kerb lane clear of the shopfronts, the PAPD station stands inside
+// its block with only its door on the kerb, and a final pass in
+// buildCityData guarantees no parking spot touches a building.
 import { makeRng, randRange, pick } from './util.js';
 
 export const ROAD_WIDTH = 14;

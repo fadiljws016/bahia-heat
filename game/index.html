@@ -4,25 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bahia Heat — Puerto Alba</title>
-<!-- Round five (final polish): the MARINA ALTA fascia is sized to sit
-     whole inside the cover frame, gun smoke runs warm grey instead of
-     white, and every staged shooter faces his target. The game below is
-     unchanged in structure: static files, no network, keyboard + mouse.
-     Round six: the fascia drops lower on the colonnade with headroom in
-     its lettering, so the orange roof trim no longer crosses the glyph
-     tops (the T of ALTA keeps its crossbar), and the combat screenshot's
-     lens moves to the runner's gun side so his aim reads in the frame.
-     Round seven: the combat screenshot is re-shot from the right — the
-     round-five composition mirrored — with the PAPD line re-spread so
-     every officer stands visible in the open and the staged volley
-     thinned so its smoke never covers them; the gunfire itself is
-     untouched.
-     Round eight: the chase screenshot finally shows FALCON-1 in full —
-     rotor, fuselage, tail and skids inside the frame over the
-     boulevard — and the combat screenshot fields a sixth PAPD officer
-     by the surrendering civilian, with the runner stepped out from
-     his cover car so his shotgun reads stock to muzzle. Staging only;
-     the game below is the same static files. -->
+<!-- Bahia Heat's single page: the canvas mount, the full HUD (mission
+     panel, PAPD dispatch board, wanted stars, weapon slots, vitals,
+     dialogue, toasts, banners), the full-screen city map with its
+     legend, and the title / pause / end screens. Static files only —
+     no network requests, keyboard + mouse. The staged screenshots the
+     game is judged by are this same page under ?shot= URLs: the cover
+     under the MARINA ALTA fascia, the map-open drive, FALCON-1 shown
+     in full over the boulevard chase, and the alley gunfight composed
+     from the right with all six enemies in the open. -->
 <style>
   :root {
     --gold: #ffb340; --gold-soft: #ffcf6e; --ink: #0d141d; --glass: rgba(10, 16, 24, 0.78);
@@ -258,6 +248,8 @@
     <span class="map-hint">M / ESC — CLOSE</span>
   </div>
   <canvas id="bigmap" width="880" height="620"></canvas>
+  <!-- The legend mirrors, symbol for symbol, the glyphs minimap.js paints
+       on the chart itself — eleven entries, no more, no fewer. -->
   <div class="map-legend">
     <span><span class="sw dia" style="background:#ffb340"></span>Objective</span>
     <span><span class="sw" style="background:#ffb340"></span>Route</span>

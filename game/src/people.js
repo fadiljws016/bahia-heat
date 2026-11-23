@@ -1,38 +1,21 @@
-// people.js — the articulated low-poly person factory every human in Puerto
-// Alba is built from: the player, the crowds, the rival crews and the PAPD's
-// foot officers alike. Jointed shoulders, elbows, hips and knees, hair and
-// hats, dresses and uniforms — and a pose system (walk, run, flee, aim,
-// chat, sit, crouch, down) the systems drive per frame. Round eight
-// leans on a contract this factory has kept since round three: every
-// person carries all three firearm models on the forearm mount, so
-// the staging can swap a staged officer's P-9 for the longer Kobra
-// with one showWeapon call — no new model, no factory change.
+// people.js — the articulated low-poly person factory every human in
+// Puerto Alba is built from: the player, the crowds, the rival crews
+// and the PAPD's foot officers alike. Jointed shoulders, elbows, hips
+// and knees, hair and hats, dresses and uniforms — and a pose system
+// (walk, run, flee, aim, chat, sit, down, punch) the systems drive per
+// frame. Geometry and materials are shared across every person; only
+// the group hierarchy is per character.
 //
-// Round three gives every firearm a real model: the P-9, the Kobra and the
-// Muelle are built part by part (slide, barrel, magazine, pump, stock) so a
-// weapon reads at screenshot distance, carried either in the hand or in the
-// hip holster. Proportions grow a touch taller and narrower through the
-// shoulders, idles shift their weight, and outfits gain sunglasses,
-// ponytails and patterned shirts. Geometry and materials are shared across
-// every person; only the group hierarchy is per character.
-//
-// Round four re-plants the aim pose: feet apart, knees bent, weight low —
-// a shooter standing his ground, where round three's long front lunge
-// read as a man running while he fired.
-//
-// Round five audits this rig rather than changing it: the weapon mount
-// turns each barrel onto the forearm's axis, so a gun follows its owner's
-// mesh exactly (barrel-versus-facing measured 0.0° across the staged
-// fight). Every misalignment the audit found lived in the staging.
-// Round six audits the rig once more — full arm chain this time:
-// shoulder, elbow, hand, grip and muzzle tip all sit on the aim line,
-// and the isolated figure reads as a clean aimed profile. The combat
-// frame's misread lived in the camera's seat, not in this rig; the rig
-// is unchanged.
-
-// Round seven poses nobody new: the planted aim stance and the
-// part-by-part Muelle the combat frame is judged on are this file's
-// round-three/four work, re-photographed from the right in shots.js.
+// Every firearm is a real model, built part by part (slide, barrel,
+// magazine, pump, stock) so a weapon reads at screenshot distance, and
+// every person carries all three on the forearm mount — so the staging
+// can swap a staged officer's P-9 for the longer Kobra with one
+// showWeapon call, no new model, no factory change. The mount turns
+// each barrel onto the forearm's axis, so a gun follows its owner's
+// mesh exactly. The aim pose is a planted shooting stance — feet set
+// apart, knees bent, weight low — never a stride: a shooter standing
+// his ground, because a lunging figure reads as a man running while
+// he fires.
 import { makeRng, clamp } from './util.js';
 
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);

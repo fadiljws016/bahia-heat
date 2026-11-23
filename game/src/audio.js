@@ -1,18 +1,10 @@
-// audio.js — every sound in Bahia Heat is synthesized with WebAudio: engine
-// hum, two-tone sirens, gunfire, explosions, traffic horns, the ocean, and
-// three radio stations that are nothing but scheduled oscillator arpeggios.
-// No audio files exist. The context is created lazily on the first user
-// gesture (browser policy), and screenshot modes stay silent. Round
-// eight is another staging round — a helicopter repositioned, officers
-// re-armed and re-aimed inside shots.js — and this mix stays exactly
-// as tuned; the staged frames are silent either way. Round three
-// gives the gunshot a low body under its crack, so a volley sounds like a
-// volley and not a row of caps. Round five is a visual pass (signage,
-// smoke, facings) and leaves this mix exactly as tuned. Round six is a
-// visual pass too (fascia headroom, the combat lens) — the mix stands.
-// Round seven keeps every synthesized sound exactly as tuned: the
-// staged combat volley fires at half cadence (shots.js), so this file's
-// gunshot is simply heard half as often inside the tableau.
+// audio.js — every sound in Bahia Heat is synthesized with WebAudio:
+// engine hum, two-tone sirens, gunfire with a low body under its crack
+// (so a volley sounds like a volley, not a row of caps), explosions,
+// traffic horns, the ocean, and three radio stations that are nothing
+// but scheduled oscillator arpeggios. No audio files exist. The context
+// is created lazily on the first user gesture (browser policy), and
+// screenshot modes stay silent.
 
 let ctx = null;
 let master = null;
@@ -125,6 +117,14 @@ export const sfx = {
   heliThump() { tone({ freq: 58, dur: 0.16, type: 'sine', gain: 0.16, sweepTo: 40 }); },
 };
 
+/** Stop a loop's oscillators shortly after its gain has been parked, so
+ *  the fade is heard but the nodes don't run forever. */
+function retire(parts, ms) {
+  setTimeout(() => {
+    for (const p of parts) { try { p.stop(); } catch { /* already stopped */ } }
+  }, ms);
+}
+
 /** Engine loop: a sawtooth whose pitch follows the player's car speed. */
 export function setEngine(on, speedRatio = 0) {
   if (!ctx) return;
@@ -143,7 +143,7 @@ export function setEngine(on, speedRatio = 0) {
     engineNodes.sub.frequency.value = f / 2;
     engineNodes.filter.frequency.value = 320 + speedRatio * 700;
     engineNodes.g.gain.value = muted ? 0 : (on ? 0.05 + speedRatio * 0.05 : 0);
-    if (!on) { const n = engineNodes; engineNodes = null; setTimeout(() => { try { n.osc.stop(); n.sub.stop(); } catch { /* done */ } }, 250); }
+    if (!on) { const n = engineNodes; engineNodes = null; retire([n.osc, n.sub], 250); }
   }
 }
 
@@ -163,7 +163,7 @@ export function setSiren(near) {
   }
   if (sirenNodes) {
     sirenNodes.g.gain.value = muted ? 0 : near * 0.055;
-    if (near <= 0.02) { const n = sirenNodes; sirenNodes = null; setTimeout(() => { try { n.osc.stop(); n.lfo.stop(); } catch { /* done */ } }, 300); }
+    if (near <= 0.02) { const n = sirenNodes; sirenNodes = null; retire([n.osc, n.lfo], 300); }
   }
 }
 

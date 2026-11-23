@@ -1,23 +1,14 @@
-// missions.js — the job engine. It offers the next story job at its giver's
-// corner (cyan beacon), plays the intro dialogue, then walks the job's stages
-// (story.js data) one by one: gold beacon on the objective, HUD panel fed
-// from here, timers, fleeing target cars, shootout crews, checkpoint races
-// and taxi fares. Finishing pays cash and respect, saves, and offers the
-// next job. After the finale, Dario keeps handing out single taxi fares.
-// Round eight adds no job and moves no stage: Palma Showdown's
-// shootout serves once more as the combat screenshot's backdrop, and
-// the extra officer in that frame is a staging dress, not a seventh
-// stage enemy — the job plays exactly as written.
-// Round three toughens the shootout crews a step (their health scales with
-// the job's place in the story) to match the heavier arsenal they now face.
-// Round six touches no job data: Palma Showdown's escape stage is only
-// re-photographed (shots.js), its crew and stakes exactly as written.
-// Round five retunes no job: Palma Showdown's escape stage is the facing
-// audit's stage, run exactly as this engine serves it in play.
-
-// Round seven re-stages Palma Showdown's escape tableau in shots.js
-// without touching this engine: the mission state the combat frame's
-// HUD reports is the same fakeMission(3, 2) as in rounds five and six.
+// missions.js — the job engine. It offers the next story job at its
+// giver's corner (cyan beacon), plays the intro dialogue, then walks
+// the job's stages (story.js data) one by one: gold beacon on the
+// objective, HUD panel fed from here, timers, fleeing target cars,
+// shootout crews (their health scales with the job's place in the
+// story, to match the heavier arsenal they face), checkpoint races and
+// taxi fares. Finishing pays cash and respect, saves, and offers the
+// next job. After the finale, Dario keeps handing out single taxi
+// fares. The staged screenshots borrow this engine's record shape
+// (shots.js builds the same mission object by hand) so the HUD over a
+// frozen frame reports a real job at a real stage.
 import { G, rankFor } from './state.js';
 import { MISSIONS, CHARACTERS } from './story.js';
 import { PLACES } from './city.js';

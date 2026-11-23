@@ -1,26 +1,16 @@
-// util.js — the shared toolbox: a seeded random generator (so the city, the
-// crowds and the screenshot scenes come out identical on every load), the
-// angle and distance math every system leans on, and the one collision
-// primitive that keeps people and cars out of the walls. Round eight
-// adds no tools: its staging was placed by projecting positions
-// through the camera in this file's atan2(dx, dz) heading convention
-// — gun segments, officer posts, a helicopter's elevation — and the
-// arithmetic all agreed with the captured frames. Round three adds
-// the squared-distance helper the hot loops use to skip a square root.
-// Round six adds no tools either: its re-audit compared headings, barrel
-// axes and the head-bun's offset in this file's atan2(dx, dz) convention,
-// and the numbers all agreed — the defect was photographic, not numeric.
-// Round five adds no tools: its facing audit compared headings in this
-// file's atan2(dx, dz) convention from the maker's harness, not in-game.
-// Round seven's officer ladder was laid out with this file's
-// atan2(dx, dz) heading convention and plain projection arithmetic
-// from the maker's harness — the toolbox needed no new tool.
+// util.js — the shared toolbox: a seeded random generator so the city,
+// the crowds and the staged scenes come out identical on every load, the
+// angle and distance arithmetic every system leans on (headings are
+// atan2(dx, dz) throughout the project), and the collision primitives
+// that keep people and cars out of walls — and, since the glitch-fix
+// pass, out of each other: cars are solid boxes, on foot and behind the
+// wheel alike.
 
 /**
  * Mulberry32: a tiny, fast, deterministic PRNG. Same seed, same city.
- * The constants are the generator's own (a Weyl-sequence increment and
- * two imul mixing rounds); every system seeds its own stream so adding a
- * consumer never reshuffles another system's draws.
+ * The constants are the generator's own — a Weyl-sequence increment and
+ * two imul mixing rounds — and every system seeds its own stream, so
+ * adding a consumer never reshuffles another system's draws.
  */
 export function makeRng(seed) {
   let a = seed >>> 0;
@@ -35,10 +25,10 @@ export function makeRng(seed) {
 export const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 export const lerp = (a, b, t) => a + (b - a) * t;
 
-/** A float in [lo, hi) drawn from an rng — the layout code's favourite call. */
+/** A float in [lo, hi) drawn from an rng — the layout code's favourite. */
 export const randRange = (rng, lo, hi) => lo + rng() * (hi - lo);
 
-/** An integer in [lo, hi] (both ends included) drawn from an rng. */
+/** An integer in [lo, hi], both ends included, drawn from an rng. */
 export const randInt = (rng, lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
 
 /** One element of a list, chosen by an rng. */
@@ -61,7 +51,7 @@ export function wrapAngle(a) {
 
 export const dist2d = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
 
-/** Squared 2D distance — for comparisons that never need the root. */
+/** Squared 2D distance — for hot-loop comparisons that skip the root. */
 export const dist2dSq = (ax, az, bx, bz) => (ax - bx) * (ax - bx) + (az - bz) * (az - bz);
 
 /** Format seconds as m:ss for mission timers. */
@@ -94,7 +84,7 @@ export function collideCircleBox(x, z, radius, box) {
     const d = Math.sqrt(d2);
     return { x: nx + (dx / d) * radius, z: nz + (dz / d) * radius, hit: true };
   }
-  // Centre inside the box: push out along the smallest penetration axis.
+  // Centre inside the box: leave by the smallest penetration axis.
   const left = x - box.minX, right = box.maxX - x, top = z - box.minZ, bottom = box.maxZ - z;
   const min = Math.min(left, right, top, bottom);
   if (min === left) return { x: box.minX - radius, z, hit: true };
@@ -107,18 +97,18 @@ export function collideCircleBox(x, z, radius, box) {
  * Push a circle (x, z, radius) out of an oriented box: the footprint of
  * a car at (cx, cz) with a heading, halfW across and halfL along its
  * forward axis. Same contract as collideCircleBox — the corrected point
- * on a hit, null when clear. The glitch-fix pass adds this so people and
- * cars treat other cars as the solid boxes they are.
+ * on a hit, null when clear. This is what makes parked and moving cars
+ * solid to the walking player and to the car he is driving.
  */
 export function collideCircleOBB(x, z, radius, cx, cz, heading, halfW, halfL) {
   const dx = x - cx, dz = z - cz;
   const fx = Math.sin(heading), fz = Math.cos(heading); // the box's forward
-  const rx = fz, rz = -fx; // the box's right
+  const rx = fz, rz = -fx;                              // the box's right
   const along = dx * fx + dz * fz;
   const side = dx * rx + dz * rz;
   const qAlong = clamp(along, -halfL, halfL);
   const qSide = clamp(side, -halfW, halfW);
-  let dAlong = along - qAlong, dSide = side - qSide;
+  const dAlong = along - qAlong, dSide = side - qSide;
   const d2 = dAlong * dAlong + dSide * dSide;
   if (d2 > radius * radius) return null;
   if (d2 > 1e-9) {
@@ -126,7 +116,7 @@ export function collideCircleOBB(x, z, radius, cx, cz, heading, halfW, halfL) {
     const px = qAlong + (dAlong / d) * radius, pz = qSide + (dSide / d) * radius;
     return { x: cx + fx * px + rx * pz, z: cz + fz * px + rz * pz, hit: true };
   }
-  // Centre inside the box: push out along the smallest penetration axis.
+  // Centre inside the box: leave by the smallest penetration axis.
   const pushAlong = halfL - Math.abs(along), pushSide = halfW - Math.abs(side);
   let px = along, pz = side;
   if (pushSide < pushAlong) pz = (side >= 0 ? 1 : -1) * (halfW + radius);

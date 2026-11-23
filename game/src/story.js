@@ -1,18 +1,9 @@
 // story.js — the people of Puerto Alba and the eight jobs that make the
-// runner's name. Pure data: missions.js interprets the stage kinds. Every
-// name, crew and grudge here is Bahia Heat's own. Round eight writes
-// no new story: Palma Showdown's alley is the same stage in the same
-// words — the fuller helicopter over the chase and the sixth officer
-// in its shootout photograph are staging, and Marisol's briefings
-// neither gain nor lose a line. Round three sharpens two
-// of Marisol's briefings to name the arsenal the runner now carries.
-// Round five touches no story data: Palma Showdown's escape stage serves
-// as the facing audit's backdrop exactly as written here. Round six
-// keeps that promise too — the stage is only re-photographed.
-
-// Round seven keeps Palma Showdown's data exactly as written — the
-// same escape stage serves as the combat tableau; only its staged
-// photograph changes seats, in shots.js.
+// runner's name. Pure data: missions.js interprets the stage kinds, and
+// the HUD prints titles, objectives and briefing lines from these
+// records verbatim — which is why this file's words are content, not
+// commentary, and change only when the story itself does. Every name,
+// crew and grudge here is Bahia Heat's own.
 import { PLACES } from './city.js';
 
 export const CHARACTERS = {

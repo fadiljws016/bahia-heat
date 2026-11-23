@@ -1,38 +1,16 @@
 // officers.js — PAPD on foot: the missing half of the wanted system. At
-// three stars and above, when the player is out of their car, cruisers stop
-// and officers get out — navy uniforms, caps, drawn pistols — and fight the
-// way the dispatch panel says they do: dive behind a car, crouch, pop up,
-// fire a burst, duck back down. Two more stand at every roadblock. They are
-// real targets: combat.js can hit them, and putting one down is the fastest
-// way to make the whole city angry. Round eight fields one more of
-// these officers in the staged fight — a sixth man posted by the
-// surrendering civilian — and arms the two deep men with Kobras for
-// the photograph; both are staging calls in shots.js, and the live
-// deployment below still puts P-9s in every officer's hand. Round six re-verifies the staged
-// officers' facings from the combat shot's new gun-side camera: their
-// aimOfficer turns (shots.js) were already exact, and from the new lens
-// their guns read trained on the runner at last. Behaviour unchanged.
-// way to make the whole city angry.
-//
-// Round three dresses them properly (the uniform flag now reaches the
-// person factory: navy cap with its badge, belt, chest badge), puts the
-// modelled P-9 in their hands, and lengthens their bursts — four to six
-// rounds at a faster cadence, so a PAPD volley reads as a volley.
-//
-// Round four leaves their shooting as it is — the change is in how it
-// looks: officerShot speaks through gunshotFx like everyone else, so the
-// smaller muzzle stars and short warm tracer dashes of the effects pass
-// apply to the PAPD unchanged, and their navy stays readable mid-fight.
-//
-// Round five's audit measured these officers dead-on — heading, mesh and
-// barrel on the player to within a degree. The explicit turn in
-// aimOfficer (shots.js) is the pattern that keeps them honest; round
-// five only had to give the runner the same courtesy.
-
-// Round seven re-spreads this file's staged officers by projection
-// in shots.js — one short of the cruiser, one deep on the second
-// line, one across the street. spawnOfficerAt, the aim/cover phases
-// and the live deployment logic here are unchanged.
+// three stars and above, when the player is out of their car, cruisers
+// stop and officers get out — navy uniforms with badged caps, drawn
+// modelled P-9s — and fight the way the dispatch panel says they do:
+// dive behind a car, crouch, pop up, fire a burst of four to six rounds,
+// duck back down. Two more stand at every roadblock. They are real
+// targets: combat.js can hit them, and putting one down is the fastest
+// way to make the whole city angry. Their shots speak through gunshotFx
+// like everyone else's, so the approved muzzle stars and short warm
+// tracer dashes apply to the PAPD unchanged and their navy stays
+// readable mid-fight. (The staged fight in shots.js borrows this same
+// spawnOfficerAt; its extra postings and re-armed Kobras are staging
+// calls, and the live deployment below still puts P-9s in every hand.)
 import { G } from './state.js';
 import { clamp, collideCircleBox, dist2d, makeRng } from './util.js';
 import { collidersNear } from './city.js';
@@ -81,14 +59,14 @@ export function spawnRoadblockOfficers(rb) {
 export function ensureOfficers() {
   if (G.mode !== 'playing' || G.player.inCar || G.wanted < 2.9) return;
   const want = Math.min(5, 2 + Math.floor(G.wanted));
-  const active = G.officers.filter((o) => !o.dead && !o.roadblock).length;
-  if (active >= want) return;
+  const activeCount = () => G.officers.filter((o) => !o.dead && !o.roadblock).length;
+  if (activeCount() >= want) return;
   // Deploy from the nearest cruisers that have not already emptied.
   const cruisers = G.policeCars
     .filter((c) => !c.dead && dist2d(c.x, c.z, G.player.x, G.player.z) < 95)
     .sort((a, b) => dist2d(a.x, a.z, G.player.x, G.player.z) - dist2d(b.x, b.z, G.player.x, G.player.z));
   for (const car of cruisers) {
-    if (G.officers.filter((o) => !o.dead && !o.roadblock).length >= want) break;
+    if (activeCount() >= want) break;
     if (car.anchored) continue;
     car.anchored = true;
     for (let i = 0; i < 2; i += 1) {

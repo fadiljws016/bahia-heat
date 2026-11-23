@@ -1,28 +1,15 @@
-// vehicles.js — the cars of Puerto Alba: low-poly box-built models in five
-// flavours, with grilles, bumpers, mirrors, spoilers and light cones after
-// dark. An arcade driving model (throttle, steering that bites with speed,
-// handbrake slides), building and car-to-car collision, and a damage model
-// that runs dented → smoking → burning → wreck. Brake lights are per-car,
-// so a queue of traffic reads as traffic. Round eight changes no car:
-// the chase frame's runner sedan, its two cruisers and the roadblock
-// are these same staged vehicles — what changed above them is the
-// helicopter, and what changed beside the combat frame's cover sedan
-// is the man who stepped out from behind it. Round six changes no car: the
-// combat frame's burning cover sedan and the PAPD cruiser are the same
-// staged vehicles as round five, seen from the new gun-side lens — the
-// sedan now stands mid-frame, still burning on schedule (shots.js).
-//
-// Round three deepens the paint palette to sit inside the new grade —
+// vehicles.js — the cars of Puerto Alba: low-poly box-built models in
+// five flavours, with grilles, bumpers, mirrors, spoilers and light
+// cones after dark. The paint palette sits inside the filmic grade —
 // hotter reds, a truer racing yellow, a cyan that pops at dusk — and
-// sharpens the glass so cabins catch the light.
-//
-// Round five changes no car: the burning cover sedan and the RAM cruiser
-// in the audit frame are these same models — they simply wear the darker,
-// warmer smoke of the round-five effects pass.
-
-// Round seven photographs the same staged vehicles from the mirrored
-// seat: the cruiser anchors the re-spread PAPD ladder, and the cover
-// sedan burns behind the runner on the same feed schedule (shots.js).
+// the glass is sharp so cabins catch the light. An arcade driving model
+// (throttle, steering that bites with speed, handbrake slides),
+// building collision, car-to-car collision, and a damage model that
+// runs dented → smoking → burning → wreck. Brake lights are per-car,
+// so a queue of traffic reads as traffic. Cars are solid in every
+// direction of travel: collideCarWithCars answers for the driven car
+// exactly the way a building does, and player.js keeps the walking
+// runner out of their footprints — nobody ghosts through a fender.
 import { G } from './state.js';
 import { clamp, wrapAngle, collideCircleBox, collideCircleOBB, dist2d } from './util.js';
 import { collidersNear } from './city.js';
@@ -342,7 +329,7 @@ export function damageCar(car, amount, byPlayerAction = false) {
   const armorMul = 1 - car.armorLevel * 0.15;
   car.hp -= amount * armorMul;
   if (car.hp <= 0 && car.burning <= 0) {
-    car.burning = 1.5; // seconds of fire before it goes up (1.6 in round three; denser fights resolve a beat quicker)
+    car.burning = 1.5; // seconds of fire before it goes up — short, so a dense fight resolves a beat quicker
     if (byPlayerAction && car.driver === 'police') G.policeAggro = true;
   }
 }
