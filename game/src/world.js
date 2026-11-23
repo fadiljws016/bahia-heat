@@ -21,7 +21,7 @@
 // same 18:15 golden light — no sky, grade or lamp changes; only the
 // lens and the staging in shots.js moved.
 import { G } from './state.js';
-import { BOULEVARD_X, ROADS_X, ROADS_Z, CITY_BOUNDS, addCollider } from './city.js';
+import { BOULEVARD_X, ROADS_X, ROADS_Z, CITY_BOUNDS, addCollider, streetlightSpots } from './city.js';
 import { makeRng, lerp, clamp } from './util.js';
 
 // Sky/fog/sun colours across the day. Puerto Alba lives near the warm end,
@@ -250,10 +250,11 @@ function buildPalms(scene) {
 }
 
 function buildStreetlights(scene) {
-  const spots = [];
-  for (let z = -300; z < 310; z += 40) { spots.push([BOULEVARD_X - 8.6, z]); spots.push([BOULEVARD_X + 8.6, z + 20]); }
-  for (const rx of ROADS_X) for (let z = -280; z < 300; z += 80) spots.push([rx + 8.6, z]);
-  for (const rz of ROADS_Z) for (let x = -140; x < 290; x += 80) spots.push([x, rz - 8.6]);
+  // The spots come from city.js (streetlightSpots): the same staggered
+  // pattern as ever, but a lamp dealt onto an intersection no longer
+  // stands in the middle of the cross street — it slides to the corner
+  // kerb, so no pole rises out of the asphalt.
+  const spots = streetlightSpots();
   const poleGeo = new THREE.CylinderGeometry(0.09, 0.12, 5.6, 5);
   poleGeo.translate(0, 2.8, 0);
   const poleMat = new THREE.MeshLambertMaterial({ color: 0x3c4248 });

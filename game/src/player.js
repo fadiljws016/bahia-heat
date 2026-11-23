@@ -27,11 +27,11 @@
 // five: spawnPlayer freezes the mesh at its spawn heading, so shots.js
 // turns the runner explicitly for the mirrored combat seat, as before.
 import { G } from './state.js';
-import { clamp, collideCircleBox, dist2d } from './util.js';
+import { clamp, collideCircleBox, collideCircleOBB, dist2d } from './util.js';
 import { collidersNear, PLACES } from './city.js';
 import { buildPersonMesh, posePerson, showWeapon } from './people.js';
 import { input } from './input.js';
-import { driveCar } from './vehicles.js';
+import { driveCar, collideCarWithCars } from './vehicles.js';
 import { addCrime } from './police.js';
 import { sfx, setEngine } from './audio.js';
 
@@ -61,6 +61,30 @@ function keepOutOfWalls(p) {
   }
   p.x = clamp(p.x, -250, 290);
   p.z = clamp(p.z, -306, 306);
+}
+
+/** Every car the runner must treat as solid (the mission target rides outside the sets while it is a chase car). */
+function solidCars() {
+  const list = [...G.parkedCars, ...G.trafficCars, ...G.policeCars];
+  if (G.mission?.targetCar && !list.includes(G.mission.targetCar)) list.push(G.mission.targetCar);
+  return list;
+}
+
+/**
+ * Cars are not ghosts (the glitch-fix pass): on foot the runner is
+ * pushed out of every nearby car's footprint, the same circle test the
+ * walls use, against the car's oriented box. Standing at a door still
+ * leaves him inside findEnterableCar's reach, so E keeps working.
+ */
+function keepOutOfCars(p) {
+  for (const car of solidCars()) {
+    if (car.dead) continue;
+    const dx = p.x - car.x, dz = p.z - car.z;
+    const reach = car.def.length / 2 + 1.7;
+    if (dx * dx + dz * dz > reach * reach) continue;
+    const hit = collideCircleOBB(p.x, p.z, 0.55, car.x, car.z, car.heading, car.def.width / 2, car.def.length / 2);
+    if (hit) { p.x = hit.x; p.z = hit.z; }
+  }
 }
 
 /** The closest car the player could get into (any set), or null. */
@@ -112,6 +136,7 @@ function exitCar() {
   p.heading = car.heading;
   p.mesh.visible = true;
   keepOutOfWalls(p);
+  keepOutOfCars(p);
   sfx.door();
 }
 
@@ -154,6 +179,7 @@ export function updatePlayer(dt) {
       handbrake: input.keys.has('Space'),
     };
     driveCar(car, driveInput, dt);
+    collideCarWithCars(car, solidCars(), dt);
     p.x = car.x; p.z = car.z; p.heading = car.heading;
     p.moving = Math.abs(car.speed) > 1;
     setEngine(true, Math.abs(car.speed) / car.def.topSpeed);
@@ -190,6 +216,8 @@ export function updatePlayer(dt) {
   } else if (aiming) {
     p.heading = camYaw + Math.PI;
   }
+  // Every on-foot frame, moving or not: a car is a wall he cannot cross.
+  keepOutOfCars(p);
 
   // The carry: fists (or a punch mid-swing) show nothing; aiming brings
   // the active weapon up in both hands; everything else rides the hip.

@@ -24,7 +24,7 @@
 // seat: the cruiser anchors the re-spread PAPD ladder, and the cover
 // sedan burns behind the runner on the same feed schedule (shots.js).
 import { G } from './state.js';
-import { clamp, wrapAngle, collideCircleBox, dist2d } from './util.js';
+import { clamp, wrapAngle, collideCircleBox, collideCircleOBB, dist2d } from './util.js';
 import { collidersNear } from './city.js';
 import { burst, burstSmoke, explodeAt } from './effects.js';
 import { sfx } from './audio.js';
@@ -243,6 +243,50 @@ function collideCarWithWorld(car, nx, nz) {
     }
   }
   return false;
+}
+
+/**
+ * One car against the rest, treated as solid: the player's car (the
+ * caller passes it with the sets it must not ghost through). Two
+ * circles, nose and tail, against each nearby car's oriented footprint;
+ * on contact the moving car is pushed back out and answers exactly as
+ * it does for a building — a bounce, and damage, sparks and a crash
+ * past 7 m/s. The other cars are never shoved: a parked car stays
+ * parked, a cruiser keeps its line. Added by the glitch-fix pass —
+ * before it, the driven car had no collision with other cars at all
+ * and drove straight through them.
+ */
+export function collideCarWithCars(car, others, dt) {
+  if (car.dead) return false;
+  const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
+  const half = car.def.length / 2 - 0.5;
+  let impact = 0;
+  for (const other of others) {
+    if (other === car || other.dead) continue;
+    const dx = other.x - car.x, dz = other.z - car.z;
+    const reach = half + other.def.length / 2 + 1.7;
+    if (dx * dx + dz * dz > reach * reach) continue;
+    for (const [ox, oz] of [[fx * half, fz * half], [-fx * half, -fz * half]]) {
+      const hit = collideCircleOBB(car.x + ox, car.z + oz, 1.0, other.x, other.z, other.heading, other.def.width / 2, other.def.length / 2);
+      if (hit) {
+        car.x += hit.x - (car.x + ox);
+        car.z += hit.z - (car.z + oz);
+        impact = Math.max(impact, Math.abs(car.speed));
+      }
+    }
+  }
+  if (impact > 0) {
+    if (impact > 7) {
+      damageCar(car, (impact - 6) * 1.6, true);
+      sfx.crash(impact > 16);
+      G.cameraShake = Math.min(0.7, G.cameraShake + impact * 0.012);
+      burst(car.x + fx * 2, 0.8, car.z + fz * 2, 0xffcf5e, 9, 2.6);
+      burstSmoke(car.x + fx * 2, 0.7, car.z + fz * 2, 3, { color: 0xbfae90, life: 0.9, rise: 0.45 });
+    }
+    car.speed *= -0.18;
+    syncCarMesh(car, dt);
+  }
+  return impact > 0;
 }
 
 /** Car-to-car: soft push apart plus damage on hard contact. Call once per frame for the active set. */

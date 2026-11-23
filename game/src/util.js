@@ -103,6 +103,37 @@ export function collideCircleBox(x, z, radius, box) {
   return { x, z: box.maxZ + radius, hit: true };
 }
 
+/**
+ * Push a circle (x, z, radius) out of an oriented box: the footprint of
+ * a car at (cx, cz) with a heading, halfW across and halfL along its
+ * forward axis. Same contract as collideCircleBox — the corrected point
+ * on a hit, null when clear. The glitch-fix pass adds this so people and
+ * cars treat other cars as the solid boxes they are.
+ */
+export function collideCircleOBB(x, z, radius, cx, cz, heading, halfW, halfL) {
+  const dx = x - cx, dz = z - cz;
+  const fx = Math.sin(heading), fz = Math.cos(heading); // the box's forward
+  const rx = fz, rz = -fx; // the box's right
+  const along = dx * fx + dz * fz;
+  const side = dx * rx + dz * rz;
+  const qAlong = clamp(along, -halfL, halfL);
+  const qSide = clamp(side, -halfW, halfW);
+  let dAlong = along - qAlong, dSide = side - qSide;
+  const d2 = dAlong * dAlong + dSide * dSide;
+  if (d2 > radius * radius) return null;
+  if (d2 > 1e-9) {
+    const d = Math.sqrt(d2);
+    const px = qAlong + (dAlong / d) * radius, pz = qSide + (dSide / d) * radius;
+    return { x: cx + fx * px + rx * pz, z: cz + fz * px + rz * pz, hit: true };
+  }
+  // Centre inside the box: push out along the smallest penetration axis.
+  const pushAlong = halfL - Math.abs(along), pushSide = halfW - Math.abs(side);
+  let px = along, pz = side;
+  if (pushSide < pushAlong) pz = (side >= 0 ? 1 : -1) * (halfW + radius);
+  else px = (along >= 0 ? 1 : -1) * (halfL + radius);
+  return { x: cx + fx * px + rx * pz, z: cz + fz * px + rz * pz, hit: true };
+}
+
 /** True when a circle overlaps a box at all (cover checks, blast tests). */
 export function circleTouchesBox(x, z, radius, box) {
   const nx = clamp(x, box.minX, box.maxX);

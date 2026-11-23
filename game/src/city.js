@@ -217,7 +217,11 @@ export function buildCityData(seed) {
   garage.awningColor = 0x8a2f1d;
   addBuilding(PLACES.hospital.x, PLACES.hospital.z, 30, 22, 16, 0xf2f4f4, 'hospital', 'S')
     .signName = 'HOSPITAL SANTA ALBA';
-  addBuilding(PLACES.policeStation.x, PLACES.policeStation.z, 28, 20, 13, 0xb9cbd8, 'station', 'S')
+  // The PLACES point is the station's front door on the kerb; the
+  // building itself stands 10 m inside its block — centred on the door
+  // point, its 20 m depth would straddle the avenue (its face reached
+  // the road's centre line, and traffic drove through its front wall).
+  addBuilding(PLACES.policeStation.x, PLACES.policeStation.z + 10, 28, 20, 13, 0xb9cbd8, 'station', 'S')
     .signName = 'PAPD · VIEJO PUERTO';
   addBuilding(PLACES.clockTower.x, PLACES.clockTower.z, 8, 8, 34, 0xe8d9b0, 'tower', 'S', { sign: false });
   // The warehouse the second job runs from.
@@ -258,14 +262,49 @@ export function buildCityData(seed) {
     colliders.push({ minX: x - 0.7, maxX: x + 0.7, minZ: z - 0.7, maxZ: z + 0.7 });
   }
 
-  // Street parking along the boulevard and two avenues — most kerbs filled.
+  // Street parking along the boulevard and the avenues — most kerbs
+  // filled. The boulevard spots keep their promenade offset (no building
+  // stands within reach of them), but the avenue spots move in from
+  // 10.6 m to the kerb lane at 8.45 m: at 10.6 a parked car's flank
+  // crossed the building line at 10 m and sat inside the shopfronts —
+  // the glitch-fix pass parks them on the road's edge instead, clear of
+  // every facade and of the traffic lanes at ±3.5 m.
   for (let z = -292; z < 300; z += 24) {
     if (rng() < 0.66) parkingSpots.push({ x: BOULEVARD_X - 10.6, z, heading: 0 });
     if (rng() < 0.66) parkingSpots.push({ x: BOULEVARD_X + 10.6, z: z + 11, heading: Math.PI });
-    if (rng() < 0.48) parkingSpots.push({ x: -40 - 10.6, z: z + 5, heading: 0 });
-    if (rng() < 0.48) parkingSpots.push({ x: 80 + 10.6, z: z + 17, heading: Math.PI });
-    if (rng() < 0.4) parkingSpots.push({ x: 140 - 10.6, z: z + 8, heading: 0 });
-    if (rng() < 0.4) parkingSpots.push({ x: -100 + 10.6, z: z + 15, heading: Math.PI });
+    if (rng() < 0.48) parkingSpots.push({ x: -40 - 8.45, z: z + 5, heading: 0 });
+    if (rng() < 0.48) parkingSpots.push({ x: 80 + 8.45, z: z + 17, heading: Math.PI });
+    if (rng() < 0.4) parkingSpots.push({ x: 140 - 8.45, z: z + 8, heading: 0 });
+    if (rng() < 0.4) parkingSpots.push({ x: -100 + 8.45, z: z + 15, heading: Math.PI });
+  }
+
+  // Final pass, from the glitch-fix round: no parked car may touch a
+  // building. The kerb-lane offsets keep street spots clear by
+  // construction, but a hand-placed landmark can still land on a lot
+  // spot the block loop dealt earlier (the clock tower did exactly
+  // that). An offending spot shifts sideways in small steps until its
+  // worst-case footprint — a Mulo truck, the biggest car a spot can
+  // hold — clears every building and every spot already settled; a
+  // spot with no clear shift in reach is dropped. Pure data: no rng
+  // draws, so the rest of the city generates exactly as before.
+  const settledSpots = [];
+  for (let i = parkingSpots.length - 1; i >= 0; i -= 1) {
+    const s = parkingSpots[i];
+    const spotClear = (x, z) => {
+      const minX = x - 1.15, maxX = x + 1.15, minZ = z - 2.95, maxZ = z + 2.95;
+      for (const b of buildings) if (minX < b.maxX && maxX > b.minX && minZ < b.maxZ && maxZ > b.minZ) return false;
+      for (const o of settledSpots) if (Math.abs(o.x - x) < 2.3 && Math.abs(o.z - z) < 5.9) return false;
+      return true;
+    };
+    if (spotClear(s.x, s.z)) { settledSpots.push(s); continue; }
+    let moved = null;
+    outer: for (const dx of [-4, 4, -8, 8, -12, 12]) {
+      for (const dz of [0, -4, 4, -8, 8]) {
+        if (spotClear(s.x + dx, s.z + dz)) { moved = { ...s, x: s.x + dx, z: s.z + dz }; break outer; }
+      }
+    }
+    if (moved) { parkingSpots[i] = moved; settledSpots.push(moved); }
+    else parkingSpots.splice(i, 1);
   }
 
   // A coarse grid over the colliders: cell 32 m, so a collision query only
@@ -335,6 +374,45 @@ export function intersections() {
   for (const rz of ROADS_Z) pts.push({ x: BOULEVARD_X, z: rz });
   for (const rx of ROADS_X) for (const rz of ROADS_Z) pts.push({ x: rx, z: rz });
   return pts;
+}
+
+/**
+ * Where the streetlights stand. The pattern is the one the city was
+ * born with — staggered pairs down the boulevard, a lamp every block
+ * along the avenues and cross streets, always 8.6 m off the road's
+ * centre line, on the kerb — with one correction from the glitch-fix
+ * pass: a lamp whose kerb spot falls on a CROSSING road (every lamp
+ * dealt onto an intersection was standing in the middle of the cross
+ * street) slides along its own street to the far kerb of the crossing,
+ * the corner where a real lamp would stand. No spot this returns is on
+ * a road cell; world.js plants the poles exactly here.
+ */
+export function streetlightSpots() {
+  const raw = [];
+  for (let z = -300; z < 310; z += 40) { raw.push({ x: BOULEVARD_X - 8.6, z, along: 'z' }); raw.push({ x: BOULEVARD_X + 8.6, z: z + 20, along: 'z' }); }
+  for (const rx of ROADS_X) for (let z = -280; z < 300; z += 80) raw.push({ x: rx + 8.6, z, along: 'z' });
+  for (const rz of ROADS_Z) for (let x = -140; x < 290; x += 80) raw.push({ x, z: rz - 8.6, along: 'x' });
+  const CLEAR = ROAD_WIDTH / 2 + 2.4; // past the crossing road's far kerb
+  const out = [];
+  const seen = new Set();
+  for (const s of raw) {
+    let { x, z } = s;
+    if (isOnRoad(x, z)) {
+      if (s.along === 'z') {
+        const rz = ROADS_Z.reduce((best, c) => (Math.abs(c - z) < Math.abs(best - z) ? c : best), ROADS_Z[0]);
+        z = rz + (z >= rz ? CLEAR : -CLEAR);
+      } else {
+        const roads = [BOULEVARD_X, ...ROADS_X];
+        const rx = roads.reduce((best, c) => (Math.abs(c - x) < Math.abs(best - x) ? c : best), roads[0]);
+        x = rx + (x >= rx ? CLEAR : -CLEAR);
+      }
+    }
+    const key = `${x.toFixed(1)},${z.toFixed(1)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push([x, z]);
+  }
+  return out;
 }
 
 /** A random point on a random road lane, for traffic and police spawns. */
