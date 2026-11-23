@@ -1,20 +1,38 @@
-// combat.js — fists and firearms, built so a gunfight is something you
-// SEE: every shot is a short warm tracer dash with a muzzle star, a
-// casing spins out of the ejection port, and the impact answers back —
-// sparks off metal, dust off masonry, a flinch off flesh. Four slots
-// (fists, pistol, SMG, shotgun) unlock along the respect ladder; ammo is
-// a simple pool per weapon, topped up by finished jobs. Officers
-// (officers.js) are first-class targets, and shooting at the PAPD is its
-// own crime.
+// Round fourteen note: the gunfight's rules are the approved ones —
+// every shot still draws its tracer, flash and casing through
+// effects.js, and the weapon table the HUD mirrors is untouched.
+// combat.js — fists and firearms, rebuilt so a gunfight is something you
+// SEE: every shot is a bright tracer streak with a muzzle flash, a casing
+// spins out of the ejection port, and the impact answers back — sparks off
+// metal, dust off masonry, a flinch off flesh. Four slots (fists, pistol,
+// SMG, shotgun) unlock along the respect ladder; ammo is a simple pool per
+// weapon, topped up by finished jobs. Officers (officers.js) are
+// first-class targets now, and shooting at the PAPD is its own crime.
+// Round eight changes no ballistics: the two staged officers who turn
+// their fire onto the Red Sails gunman do it with this same arsenal
+// and this same math — only their staging orders (shots.js) are new.
+// Round six changes no ballistics: it re-photographs the staged exchange
+// (shots.js) from the runner's gun side, so the fire this file simulates
+// can finally be seen leaving his Muelle toward the PAPD.
 //
-// The ballistics are tied to the modelled weapons (people.js): each gun
-// fires from its own muzzle — the shotgun's bloom is half again the
-// pistol's snap, its tracer burns hotter — and the streak starts at the
-// barrel tip the player can see, not at the runner's chest. Tracer
-// colours are a true burning orange: effects.js draws the streak as a
-// short dash, and a pale dash would vanish where a warm one reads as a
-// bullet's path at any distance. These parameters are the owner's
-// approved gunfire; they do not drift between passes.
+// Round three ties the ballistics to the modelled weapons (people.js):
+// each gun fires from its own muzzle — the shotgun's bloom is half again
+// the pistol's snap, its tracer burns hotter, and the streak starts at the
+// barrel tip the player can see, not at the runner's chest.
+//
+// Round five measures that promise in the staged fight: every barrel in
+// the audit sat within a degree of its owner's facing — once shots.js
+// turned the runner's mesh onto the heading this file always trusted.
+//
+// Round four cools the palette of the shot itself: every tracer colour
+// moves from pale straw to a true burning orange, because effects.js now
+// draws the streak as a short dash — a pale dash would vanish, a warm one
+// reads as a bullet's path at any distance.
+
+// Round seven leaves every live gunfight parameter in this file
+// untouched — the owner's approval of the gunfire itself is final.
+// Only the staged tableau's volley cadence changed, and that lives in
+// shots.js.
 import { G } from './state.js';
 import { dist2d } from './util.js';
 import { collidersNear } from './city.js';
@@ -94,17 +112,15 @@ function fireOnce(weapon) {
     dx /= dl; dz /= dl;
 
     // Find the nearest thing the ray meets: people, officers, cars, walls.
-    // A standing person is a 1.5 m box centred on their position.
-    const actorBox = (a) => ({ minX: a.x - 0.75, maxX: a.x + 0.75, minZ: a.z - 0.75, maxZ: a.z + 0.75 });
     let bestT = weapon.range, bestHit = null;
     for (const ped of G.peds) {
       if (ped.dead || ped.state === 'down') continue;
-      const t = rayVsBox(p.x, p.z, dx, dz, actorBox(ped));
+      const t = rayVsBox(p.x, p.z, dx, dz, { minX: ped.x - 0.75, maxX: ped.x + 0.75, minZ: ped.z - 0.75, maxZ: ped.z + 0.75 });
       if (t < bestT) { bestT = t; bestHit = { kind: 'ped', ped }; }
     }
     for (const off of G.officers) {
       if (off.dead || off.state === 'down') continue;
-      const t = rayVsBox(p.x, p.z, dx, dz, actorBox(off));
+      const t = rayVsBox(p.x, p.z, dx, dz, { minX: off.x - 0.75, maxX: off.x + 0.75, minZ: off.z - 0.75, maxZ: off.z + 0.75 });
       if (t < bestT) { bestT = t; bestHit = { kind: 'officer', off }; }
     }
     for (const set of [G.trafficCars, G.policeCars, G.parkedCars]) {

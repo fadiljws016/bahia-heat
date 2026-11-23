@@ -1,15 +1,33 @@
+// Round fourteen note: FALCON-1 keeps its approved shape — full rotor,
+// body, tail and skids, the spotlight cone narrow at the airframe and
+// widening down to its pool (the beam's -PI/2 pitch), and the staging
+// altitude pin the chase frame sets at 22. Nothing below was restyled.
 // helicopter.js — FALCON-1, the PAPD air unit. At three stars and up it
 // joins the hunt: a low-poly helicopter that orbits the suspect with
-// blinking nav lights, and at dusk its searchlight cone pins the player
-// to the road in a bright pool — under the light, the police always know
+// blinking nav lights, and at dusk its searchlight cone pins the player to
+// the road in a bright pool — under the light, the police always know
 // where you are (G.heliSeesPlayer feeds the sight state in police.js).
 // G.heli carries { active, x, z } for the minimap and the dispatch board.
+// Round three strengthens the dusk beam a step so the pool reads inside
+// the deeper grade. Round five leaves FALCON-1 grounded in the audit
+// frame on purpose: the Palma Showdown staging holds wanted at 2.6,
+// under its threshold, so the foot fight could be judged alone. Round
+// six leaves the air unit exactly as it was — its pass is signage and
+// one camera, both on the ground.
+
+// Round seven keeps FALCON-1 out of the combat frame, as staged
+// (wanted 2.6 in shots.js): the orbit, the cone and the sight feed
+// are untouched.
 //
-// Two staging pins exist for the screenshot scenes, and only shots.js
-// sets them: setHeliOrbit fixes the orbit phase, and setHeliAltitude
-// lowers the hover (live flight bobs around y 30, which puts the whole
-// airframe above the staged chase lens) so rotor, body, tail and skids
-// all sit inside the frame. Live flight never sees either pin.
+// Round eight brings FALCON-1 INTO the chase frame. The live orbit
+// flies at y 30, and from the staged chase lens (62° of vertical
+// field, pitched a breath down the boulevard) that puts the whole
+// airframe above the top edge — the round-seven chase shot showed
+// the spotlight cone and the pool but no helicopter. A staging-only
+// altitude pin (setHeliAltitude, called from shots.js) lowers the
+// staged hover so rotor, body, tail and skids all sit inside the
+// frame; the live game's altitude, orbit and sight feed never see
+// the pin and fly exactly as before.
 import { G } from './state.js';
 import { sfx } from './audio.js';
 
@@ -149,11 +167,14 @@ export function updateHeli(dt) {
   // The beam hangs from the belly to the suspect; the pool sits on him.
   beam.position.set((hx + p.x) / 2, hy / 2, (hz + p.z) / 2);
   beam.lookAt(p.x, 0, p.z);
-  // Cone direction matters: ConeGeometry puts the apex on +Y and the
-  // wide base on −Y, and lookAt aims +Z at the suspect, so the flip
-  // below is what makes the beam narrow at the airframe and spread as
-  // it falls to the pool — a real searchlight's shape. (The reversed
-  // sign once shipped: wide at the helicopter, pinched at the street.)
+  // Round nine: the cone's direction was backwards. ConeGeometry puts
+  // the apex on +Y and the wide base on −Y; lookAt aims +Z at the
+  // suspect, so rotateX(+π/2) laid the apex on the street and the
+  // base up at the airframe — the beam read wide at the helicopter
+  // and pinched where it landed. rotateX(−π/2) flips it: narrow at
+  // the source, spreading as it falls to the pool, like a real
+  // searchlight. Geometry direction only — colour and opacity are
+  // the recipe as approved.
   beam.rotateX(-Math.PI / 2);
   beam.material.opacity = G.isDusk ? 0.16 : 0.05;
   beamLight.position.set(hx, hy, hz);

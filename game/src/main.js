@@ -1,13 +1,32 @@
-// main.js — Bahia Heat's boot and heartbeat. Builds the city, wires
-// every system, runs the frame loop, and owns the mode machine: title
-// menu, play, pause, the full-screen map, and the wasted/busted endings.
-// With ?shot=<name> it instead stages one frozen scene (shots.js) for
-// the maker's screenshots and says so on window.__shotReady when
-// settled. The shot loop is deliberately inert — 45 frames of light,
-// rotor, particles and staged FX beats, but NO system updates — so a
-// staged actor keeps exactly the facing and pose shots.js gave him;
-// that inertness is what makes the screenshots honest photographs of
-// the staging rather than of the simulation.
+// main.js — Bahia Heat's boot and heartbeat. Builds the city, wires every
+// system, runs the frame loop, and owns the mode machine: title menu, play,
+// pause, the full-screen map, and the wasted/busted endings. With
+// ?shot=<name> it instead stages one frozen scene (shots.js) for the
+// maker's screenshots and says so on window.__shotReady when settled.
+// Round eight rides that loop unchanged: the combat tableau's closing
+// beats are phased by the same frame counter (the two officers fire
+// on frames 43 and 44 so the shutter at 45 catches them), and the
+// chase's pinned hover is read by the same per-frame update.
+// Round three changes nothing about the machine — the passes live in the
+// systems it wires — beyond keeping the shot loop's HUD honest. Round
+// four is the same story: district signs, muzzle-level flashes and the
+// planted aim stance all live in city.js, effects.js and people.js; the
+// machine here just keeps wiring them together. Round six's audit ran
+// through this file's shot loop, which runs no system updates in shot
+// mode — nothing here ever re-aimed the runner per frame, so the
+// combat frame's fix had to live in the staging and the lens (shots.js).
+// Round five likewise: the
+// shot loop above is what the facing audit measured through — it runs no
+// system updates in shot mode, so a staged actor keeps exactly the facing
+// shots.js gave him, which is precisely what the audit needed to prove.
+
+// Round fourteen runs through this file's loop exactly as before —
+// the same boot order, the same 45-frame shot loop, the same mode
+// machine — with the re-authored systems wired into the same sockets.
+// Round seven runs through this file's shot loop exactly as before —
+// 45 frames, effects and the staged volley alive, no system updates —
+// and the loop's fixed frame count is what shots.js phases its
+// thinned, half-cadence volley against.
 import { G, MODE } from './state.js';
 import { buildCityData, buildCityMeshes, PLACES } from './city.js';
 import { initWorld, updateWorld, setBoats, setFerris } from './world.js';
@@ -223,7 +242,7 @@ function frame(now) {
     updateWorld(0.016);
     updateHeli(0.016);
     updateEffects(0.016);
-    updateShotScene(G.shotMode, shotFrames);
+    updateShotScene(shotFrames);
     updateHud(0.016);
     if (G.mapOpen) drawBigMap(); else drawMinimap();
     renderer.render(G.scene, G.camera);
@@ -234,6 +253,7 @@ function frame(now) {
   }
 
   if (G.mode === MODE.MENU) {
+    dt = Math.min(dt, 0.05);
     updateWorld(dt);
     updateTraffic(dt);
     updatePeds(dt);

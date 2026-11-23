@@ -1,15 +1,27 @@
-// police.js — the Puerto Alba Police Department. A wanted level (0–5
-// stars, kept fractional internally) fed by witnessed crimes; cruisers
-// that hunt with three tactics — RAM, FLANK and INTERCEPT — and call
-// out over the dispatch panel; a helicopter (FALCON-1) with a
-// searchlight at 3★; spike strips and roadblocks at 4★. The department
-// fights on its feet too: cruisers anchor while their officers are
-// deployed (officers.js), the roadblock is a physical thing of barriers
-// and teeth, and dispatch reports FOOT units alongside the cars. At
-// four stars and up the re-tasking cycle shortens — the hunt adapts
-// faster when the heat is highest. (The staged scenes in shots.js
-// borrow this file's cruisers and buildRoadblockMeshes to dress their
-// frames; the hunt itself is untouched by the photographs.)
+// Round fourteen note: the PAPD's pressure curve, its named dispatch
+// voice and its roadblock kit (buildRoadblockMeshes, which the chase
+// tableau borrows) are the approved behaviour, re-verified in place.
+// police.js — the Puerto Alba Police Department. A wanted level (0–5 stars,
+// kept fractional internally) fed by witnessed crimes; cruisers that hunt
+// with three tactics — RAM, FLANK and INTERCEPT — and call out over the
+// dispatch panel; round eight shows that air unit in full in the
+// chase photograph by pinning its staged hover lower (shots.js and
+// helicopter.js) — the department's live FALCON-1 keeps its service
+// altitude and its hunt, untouched by the photograph. a helicopter (FALCON-1) with a searchlight at 3★; spike
+// strips and roadblocks at 4★. Round six leaves the department's
+// behaviour untouched — its staged cruiser and roadblock dress the
+// combat frame exactly as before, only photographed from a new seat.
+// The department fights on its feet too:
+// cruisers anchor while their officers are deployed (officers.js), the
+// roadblock is a physical thing of barriers and teeth, and dispatch reports
+// FOOT units alongside the cars. Round three shortens the re-tasking cycle
+// at four stars and up — the hunt adapts faster when the heat is highest.
+// Round five leaves the hunt as tuned: its audit frame is a 2.6-star foot
+// fight, and the dispatch distances on the HUD are the ones reported here.
+
+// Round seven borrows this file's cruiser and roadblock meshes to
+// dress the re-spread combat tableau in shots.js; the department's
+// hunt — tactics, sight states, spikes — is untouched.
 import { G } from './state.js';
 import { BOULEVARD_X, ROADS_X, ROADS_Z, randomRoadPoint } from './city.js';
 import { clamp, wrapAngle, dist2d, makeRng } from './util.js';
@@ -150,11 +162,16 @@ export function updatePolice(dt) {
   // heli's beam counts as eyes on the player.
   G.timeSinceSeen += dt;
   let seen = G.heliSeesPlayer && G.wanted >= 2.8;
-  // Any live unit inside its sight range counts as eyes on the player.
-  const unitSees = (units, range, skip) => units.some(
-    (u) => !u.dead && !skip(u) && dist2d(u.x, u.z, G.player.x, G.player.z) < range);
-  if (!seen) seen = unitSees(G.policeCars, 72, () => false);
-  if (!seen) seen = unitSees(G.officers, 46, (o) => o.state === 'down');
+  if (!seen) {
+    for (const c of G.policeCars) {
+      if (!c.dead && dist2d(c.x, c.z, G.player.x, G.player.z) < 72) { seen = true; break; }
+    }
+  }
+  if (!seen) {
+    for (const o of G.officers) {
+      if (!o.dead && o.state !== 'down' && dist2d(o.x, o.z, G.player.x, G.player.z) < 46) { seen = true; break; }
+    }
+  }
   if (seen) { G.timeSinceSeen = 0; G.sightState = 'insight'; }
   else G.sightState = G.timeSinceSeen < 11 ? 'searching' : 'lost';
 

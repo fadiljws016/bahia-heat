@@ -1,16 +1,34 @@
+// Round fourteen note: the runner's collision contract stands — he
+// stops at car hulls (keepOutOfCars against the oriented-box test in
+// util.js) instead of ghosting through them, on foot and at the wheel.
 // player.js — the runner of Puerto Alba, built from the same articulated
 // kit as everyone else (people.js): he walks and runs with swinging limbs,
 // raises a drawn weapon into a real aim pose, and throws a punch you can
-// see. The active gun rides the hip holster while he walks and talks, and
-// comes up into both hands the moment he aims. On foot he answers to WASD
-// relative to the camera; E steals or enters the nearest car; driving
-// itself lives in vehicles.js.
+// see. On foot he answers to WASD relative to the camera; E steals or
+// enters the nearest car; driving itself lives in vehicles.js. Round
+// eight moves only his staged double: in the combat photograph he
+// steps out from behind his cover sedan so the Muelle clears his
+// silhouette — the runner the player drives below walks, aims and
+// fights exactly as before.
 //
-// The facing contract, learned the hard way: the per-frame update sets
-// mesh.rotation.y from p.heading every frame, but spawnPlayer freezes
-// the mesh at its spawn heading — and in shot mode the update never
-// runs at all. So a staged scene (shots.js) must turn the mesh itself,
-// or the runner fires one way and faces another.
+// Round three carries his arsenal the way the screenshots need it seen:
+// the active gun sits in the hip holster while he walks and talks, and
+// comes up into both hands the moment he aims — pistol, Kobra or Muelle,
+// each the modelled weapon from people.js.
+//
+// Round five records this file's facing contract, learned the hard way in
+// the audit: the per-frame update below sets mesh.rotation.y from
+// p.heading every frame, but spawnPlayer freezes the mesh at whatever
+// heading it was born with — so a staged scene (shots.js) must turn the
+// mesh itself, or the runner fires one way and faces another. Round six
+// adds the corollary the captured frame taught: in shot mode the update
+// below never runs, so the staged turn is the only one he gets — and
+// the screenshot's camera must be seated where that turn can be seen,
+// which is why shots.js moved its combat lens to his gun side.
+
+// Round seven honours this file's facing contract, recorded in round
+// five: spawnPlayer freezes the mesh at its spawn heading, so shots.js
+// turns the runner explicitly for the mirrored combat seat, as before.
 import { G } from './state.js';
 import { clamp, collideCircleBox, collideCircleOBB, dist2d } from './util.js';
 import { collidersNear, PLACES } from './city.js';

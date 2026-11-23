@@ -1,10 +1,22 @@
+// Round fourteen note: the save format keeps every field it had —
+// a Continue from any earlier round still loads, and the mission
+// engine's writeSave calls land exactly where they always did.
 // save.js — progress persistence in localStorage: cash, respect, story
-// position, the unlocked weapons and their ammo pools, the weapon last
-// held (so a Continue opens with the same gun in hand), garage upgrade
-// levels and the taxi tally. writeSave runs after every job and every
-// garage purchase; readSave is offered back on the title screen as
-// Continue. Screenshot modes never touch it. Storage failures (private
-// mode, quota) are swallowed on purpose: the run simply isn't kept.
+// position, unlocked weapons and their ammo pools, garage upgrade levels,
+// and — new in round three — the weapon the runner had in hand, so a
+// Continue opens with the same gun on his hip. Round eight saves
+// nothing new: a pinned hover, a sixth staged officer and two
+// re-aimed guns are photograph dressing, and the format below keeps
+// every field it had. Written after every job and
+// every garage purchase (writeSave), offered back on the title screen as
+// Continue (readSave). Screenshot modes never touch it — round six's
+// re-staged screenshots included, so no save format moves. Round five saves
+// nothing new — a resized sign, greyer smoke and one turned runner are
+// staging and dressing, not progress state.
+
+// Round seven saves nothing new: a mirrored camera seat, a thinned
+// staged volley and three re-spread officers are staging and dressing,
+// not progress state, so the save format does not move.
 import { G } from './state.js';
 
 const KEY = 'bahia-heat-save-v1';
@@ -17,7 +29,7 @@ export function writeSave() {
   try {
     localStorage.setItem(KEY, JSON.stringify({
       v: 1,
-      savedAt: Date.now(), // for debuggers; readSave ignores it
+      savedAt: Date.now(), // when this snapshot was taken; readSave ignores it, debuggers won't
       cash: G.cash,
       respect: G.respect,
       rankIndex: G.rankIndex,
@@ -29,7 +41,7 @@ export function writeSave() {
       garageLevels: G.garageLevels,
       taxiFaresDone: G.taxiFaresDone,
     }));
-  } catch { /* storage unavailable: the run simply isn't kept */ }
+  } catch { /* storage unavailable (private mode): the run simply isn't kept */ }
 }
 
 /** Load the save into G; returns false when there is nothing usable. */

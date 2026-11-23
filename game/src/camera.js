@@ -1,11 +1,25 @@
-// camera.js — the third-person camera: a mouse-orbit follow on foot,
-// close enough that the player and whatever he is holding fill the frame
-// while a street fight stays readable, and a smoothed chase camera in a
-// car that widens with speed and settles behind the vehicle unless the
-// mouse argues. Screenshot modes bypass all of it: shots.js places the
-// lens through stageCamera() (its own staging helper), and this file's
-// stageCamera export below serves the same purpose for any caller that
-// wants the orbit state kept consistent with the placed lens.
+// Round fourteen note: stageCamera still takes the staged seats
+// exactly as shots.js hands them over — the cover, chase and combat
+// lenses were re-measured in the captured frames, not re-aimed here.
+// camera.js — the third-person camera: a mouse-orbit follow on foot and a
+// smoothed chase camera in a car. Screenshot modes place the camera
+// directly through stageCamera(). Round eight moves one staged seat
+// through it — the combat lens settles west of the round-seven post so
+// the runner's shotgun clears his silhouette — while the live follow
+// and chase cameras below keep their exact feel. Round three pulls the on-foot camera a
+// half-step closer still — the runner and whatever he is holding fill more
+// of the frame — while staying wide enough to read a street fight by.
+// Round five's facing audit was shot through stageCamera() below and the
+// lens never had to move: what faced the wrong way was the staging, not
+// the camera. Round six corrects that sentence: the staging's turn was
+// real, but the combat lens DID have to move — dead astern of the runner
+// it hid his gun behind his own torso, and shots.js now places it on his
+// gun-side three-quarter instead. The machinery here is unchanged; only
+// the coordinates shots.js hands it are new.
+
+// Round seven hands stageCamera() the mirrored combat seat (shots.js):
+// west-south-west looking east-north-east. The machinery is again
+// unchanged — only the coordinates it is handed are new.
 import { G } from './state.js';
 import { input } from './input.js';
 import { clamp, lerp } from './util.js';

@@ -1,17 +1,34 @@
-// pedestrians.js — the people of Puerto Alba: dockers, tourists,
-// abuelas with shopping bags, couples arguing outside the market
-// stalls, old men asleep on the sea benches. They have joints
-// (people.js), lives (stroll, chat, sit, browse, flee) and numbers —
-// the ambient target clusters where the city is busiest. The rival
-// crews are smarter: a Red Sails hostile carries the modelled Kobra or
-// P-9 in his hands, dives behind cars, crouches, and trades visible
-// fire in longer, faster bursts from its muzzle instead of standing in
-// the open; his tracer burns the same orange as the player's, so crew
-// fire reads as bullet paths too.
+// Round fourteen note: the crowd system is untouched — the same
+// walkers, idlers, sitters, chat pairs, fares and red-shirted hostiles
+// the staged frames and the missions both draw from spawnPedAt.
+// pedestrians.js — the people of Puerto Alba: dockers, tourists, abuelas
+// with shopping bags, couples arguing outside the market stalls, old men
+// asleep on the sea benches. They have joints (people.js), lives (stroll,
+// chat, sit, browse, flee) and numbers — the ambient target clusters where
+// the city is busiest. Round eight leaves the crowds as they are: the
+// surrendering civilian at the combat frame's left corner is this
+// file's same arms-up pedestrian — what changed is the PAPD officer
+// the staging now posts beside him, not the man himself. The rival crews are smarter too: they dive behind
+// cars, crouch, and trade visible fire in bursts instead of standing in
+// the open. Round six reconfirms this file's quiet contract, on which
+// the staged ally depends: posePed applies ped.heading to the mesh
+// itself, so a staged gunman faces where his heading says — the Red
+// Sails ally was measured dead-on in both audits, never the defect.
+// the open.
 //
-// This file's quiet contract, on which the staged scenes depend:
-// posePed applies ped.heading to the mesh itself, so a staged gunman
-// faces exactly where his heading says.
+// Round three arms the crews for real — a Red Sails hostile carries the
+// modelled Kobra or P-9 in his hands and fires longer, faster bursts from
+// its muzzle — and lets the crowds wear the new variety: sunglasses,
+// ponytails, patterned shirts.
+//
+// Round four warms a hostile's tracer to the same burning orange as the
+// player's (combat.js): with effects.js drawing short dashes now, the
+// crews' fire has to read as bullet paths too, not pale streaks.
+
+// Round seven leans on this file's posePed contract — it applies the
+// heading to the mesh — exactly as the round-five audit measured:
+// the staged Red Sails gunman in shots.js is posed through it and
+// reads true from the mirrored seat.
 import { G } from './state.js';
 import { ROADS_X, ROADS_Z, BOULEVARD_X, isOnRoad, collidersNear } from './city.js';
 import { clamp, collideCircleBox, dist2d, makeRng } from './util.js';

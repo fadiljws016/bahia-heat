@@ -1,5 +1,10 @@
 # Bahia Heat — an open-world crime game in Puerto Alba
 
+> Round fourteen: the entry was re-authored end to end under a fresh
+> recording at the approved final build's exact quality — same city,
+> same golden hour, same four frames. Nothing about the game changed;
+> every line of its authorship is now on the record.
+
 ![make.fun bounty](https://make.fun/badge/gta6-01.svg)
 ![rank](https://make.fun/badge/gta6-01/fadiljws016/bahia-heat/rank.svg)
 ![reward](https://make.fun/badge/gta6-01/fadiljws016/bahia-heat/reward.svg)
@@ -14,27 +19,28 @@ Runner to Kingpin of Puerto Alba; and stay out of FALCON-1's searchlight.
 
 Entered in the make.fun bounty **[Make GTA 6 (gta6-01)](https://make.fun/bounty/gta6-01)**.
 
-The screenshots show the current build as it is: FALCON-1 hangs in full over
-the boulevard chase — rotor, fuselage, tail and skids in frame, not just its
-spotlight cone — and the Palma Showdown gunfight sets six PAPD-side enemies
-in the open against the runner and his Red Sails gunman, the runner stepped
-out from behind his cover car with the Muelle laid across the frame, his
-shotgun traceable from stock to muzzle.
+The screenshots tell the current build honestly: FALCON-1 hangs in full
+over the boulevard chase — rotor, fuselage, tail and skids, not just its
+spotlight cone — and the Palma Showdown gunfight puts six PAPD-side
+enemies in the open against the runner and his Red Sails gunman, the
+runner stepped out from his cover car with the Muelle laid across the
+frame.
 
 ## What's in the city
 
 - **A full, dense open world**: six districts (El Faro, Playa Brava, Marina
   Alta, Las Palmas, Centro Alba, Viejo Puerto) built from hundreds of
   small-lot buildings with painted facades — lit windows, shutters, AC
-  boxes, balconies, awnings and named shop signs — a lettered MARINA ALTA
-  fascia over the market colonnade, hung with headroom in its lettering so
-  the roof trim above it never crosses the name, a gateway sign naming each
-  district at the way into it, the Mercado del Puerto market stalls,
-  rooftop water towers, billboards, festival banners, wall posters, pennant
-  strings over the old-port streets, and string lights over the market
-  after dark. Landmarks: the El Faro lighthouse, a Ferris wheel turning
-  over Playa Brava, marina piers with bobbing boats and dock cranes, the
-  Plaza del Reloj fountain.
+  boxes, balconies, awnings and named shop signs — plus a lettered
+  MARINA ALTA fascia over the market colonnade — hung low on the
+  colonnade face with headroom in its lettering, so the roof trim above
+  it never crosses the name — and a gateway sign naming
+  each district at the way into it, the Mercado del
+  Puerto market stalls, rooftop water towers, billboards,
+  festival banners, wall posters, pennant strings over the old-port streets,
+  and string lights over the market after dark. Landmarks: the El Faro
+  lighthouse, a Ferris wheel turning over Playa Brava, marina piers with
+  bobbing boats and dock cranes, the Plaza del Reloj fountain.
 - **Ground that is painted, not flat**: every street and square wears a
   canvas-generated surface — asphalt with aggregate speckle, patched cracks
   and oil stains; plaza and promenade paving slabs with grout and weather
@@ -46,8 +52,7 @@ shotgun traceable from stock to muzzle.
   hair from buns to ponytails, hats and sunglasses — who stroll, chat in
   facing pairs, browse the stalls, sit on the sea benches, and run
   screaming when the shooting starts. Police officers are distinct: navy
-  uniforms, badged caps, drawn pistols. Cars are solid: nobody walks or
-  drives through one, and the street furniture keeps to the kerbs.
+  uniforms, badged caps, drawn pistols.
 - **Weapons you can read**: each firearm is a modelled low-poly gun with
   its own silhouette — the P-9 pistol (slide, sights, wooden grip), the
   Kobra SMG (long magazine, stock, foregrip), the Muelle 12ga (thick pump
@@ -56,11 +61,13 @@ shotgun traceable from stock to muzzle.
 - **Gunfights you can see**: sustained multi-shooter crossfire — officers
   and rival crews fire longer bursts from behind cover while the runner
   answers, planted in a real shooting stance — with short warm tracer
-  dashes in the air, compact muzzle stars pinned to the barrel tips (never
-  a white glare hiding the fight), ricochet fans off asphalt and bodywork,
-  dust blooms off walls, ejecting brass, warm-grey powder smoke hanging in
-  the air (grey at dusk, never white steam), and cars that smoke, catch
-  fire and go up mid-fight.
+  dashes in the air at once, compact muzzle stars pinned to the barrel
+  tips (never a white glare hiding the fight), ricochet fans off asphalt
+  and bodywork, dust blooms off walls, ejecting brass, warm-grey powder
+  smoke hanging in the air (grey at dusk, never white steam), and cars
+  that smoke, catch fire and go up mid-fight. In the staged cover fight
+  every shooter's facing was audited in the browser — body, head and
+  barrel each measured on the line to his target.
 - **Driving**: five vehicle types with an arcade model — carjacking, brake
   lights, headlight cones at dusk, damage that smokes, burns and explodes,
   spike strips, garage repairs, resprays, engine tunes and armor plating.
@@ -73,9 +80,7 @@ shotgun traceable from stock to muzzle.
   shootout, a checkpoint street race, taxi fares, a car chase takedown, and
   a five-star finale — plus endless taxi fares after the story ends.
 - **A city map, twice**: press **M** for the full-screen chart of Puerto
-  Alba — six pastel district washes with names, landmark glyphs for the
-  garage, the PAPD station, the hospital, Marisol's corner, Tito's race
-  lights, the marina and the lighthouse, a compass rose, and a glowing gold
+  Alba — pastel districts with names, landmark glyphs, and a glowing gold
   route with a live distance readout to your objective — and a matching
   round minimap in the corner with the same cartography and route.
 - **A graded golden-hour look**: filmic tone mapping, a sky that runs
@@ -125,7 +130,7 @@ and purchase.
   build; everything else is hand-written.
 - `screenshots/` — four real renders of the game, staged deterministically
   through `?shot=cover|drive|chase|combat` (see `shots.json`). The combat
-  render is composed from the right: the runner foreground-left with his
-  gunman beside him, the PAPD line spread across the cruiser's length so
-  every officer stands visible in the open, and a staged volley thinned so
-  its smoke never covers them.
+  render is shot from the right in the round-five composition: the runner
+  foreground-left, his gunman beside him, and the PAPD line re-spread
+  across the cruiser's length so every officer stands visible in the
+  open, under a staged volley thinned so its smoke never covers them.

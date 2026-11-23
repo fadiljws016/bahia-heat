@@ -1,180 +1,156 @@
-// story.js — the people of Puerto Alba and the eight jobs that make the
-// runner's name. Pure data: missions.js interprets the stage kinds, and
-// the HUD prints titles, objectives and briefing lines from these
-// records verbatim — which is why this file's words are content, not
-// commentary, and change only when the story itself does. Every name,
-// crew and grudge here is Bahia Heat's own.
-import { PLACES } from './city.js';
+// story.js — the words of Bahia Heat: who gives the work, what the work
+// is, and what gets said on the corner before it starts. This file is
+// pure data — the engine that runs it lives in missions.js, the faces
+// and voices on the HUD come from CHARACTERS, and the shape of a job is
+// a list of stages, each with the line the mission panel shows and the
+// line it promises next. Eight jobs: a theft, a timed delivery, a
+// smuggler's run, a shootout, a checkpoint race, a season of taxi fares,
+// a takedown and a five-star finale. Marisol "La Jefa" Quintana runs
+// the market corner and most of the city's favours; Bruno "El Faro"
+// Cádiz moves crates through the marina and trusts nobody after dark;
+// Dario Ferrer keeps the garage and the grudges; Tito Vidal owns the
+// boulevard's street-racing crown and rents it out one night at a time.
 
+/** The people the dialogue box can speak for: name, initials, colour. */
 export const CHARACTERS = {
-  marisol: { name: 'Marisol “La Jefa” Quintana', short: 'Marisol', initials: 'MQ', color: '#ffb340' },
-  dario: { name: 'Dario Fuentes', short: 'Dario', initials: 'DF', color: '#57d7e8' },
-  bruno: { name: 'Bruno “El Faro” Cádiz', short: 'Bruno', initials: 'BC', color: '#7be382' },
-  tito: { name: 'Tito Salazar', short: 'Tito', initials: 'TS', color: '#ff7ab0' },
-  vera: { name: 'Capitán Vera Ojeda', short: 'Cap. Ojeda', initials: 'VO', color: '#7ab0ff' },
-  runner: { name: 'You — the Runner', short: 'Runner', initials: 'YO', color: '#f4ede1' },
+  marisol: { name: 'Marisol "La Jefa" Quintana', initials: 'MQ', color: '#e8a33c' },
+  bruno: { name: 'Bruno "El Faro" Cádiz', initials: 'BC', color: '#7ab0ff' },
+  dario: { name: 'Dario Ferrer', initials: 'DF', color: '#e86a1e' },
+  tito: { name: 'Tito Vidal', initials: 'TV', color: '#35b06f' },
+  runner: { name: 'The Runner', initials: 'RN', color: '#0f766e' },
 };
 
-const L = (who, text) => ({ who, text });
-
-// Stage kinds missions.js understands:
-//   goto     — reach a point (any way)          drive  — reach a point in a car (timer optional)
-//   steal    — a marked car waits; get in it    deliver— bring the target car to a point
-//   pickup   — reach a point on foot            chase  — run down and disable a fleeing car
-//   shootout — clear hostile crew at a point    escape — lose the wanted level entirely
-//   race     — pass every checkpoint in order   fare   — taxi work: pickup/dropoff pairs
+/**
+ * A stage: `kind` is the engine verb (missions.js), `objective` is the
+ * line the panel shows while it runs, `next` is the promise under it,
+ * `at` names a place in city.js's PLACES table, and the extra fields
+ * are the verb's own numbers (a clock for timed stages, a headcount
+ * for a fight, a fare count for a shift).
+ */
 export const MISSIONS = [
   {
-    id: 'first-wheels', title: 'First Wheels', giver: 'marisol', startAt: PLACES.marisolCorner,
-    pay: 400, respect: 120,
+    title: 'First Wheels',
+    giver: 'marisol',
+    reward: { cash: 350, respect: 60 },
     intro: [
-      L('marisol', 'So you are the new legs in Puerto Alba. I run the Marina Alta corner, and my legs earn.'),
-      L('marisol', 'A blue-top sedan sits outside Bar La Ola. Its owner owes me. Bring it to Dario’s garage — quietly, if you can.'),
-      L('runner', 'And if quiet is not on the menu?'),
-      L('marisol', 'Then drive fast, cariño. The PAPD bill by the star.'),
-    ],
-    outro: [
-      L('marisol', 'Clean work. Dario will strip it by morning. You have a future, runner.'),
+      { who: 'marisol', text: 'You are the new legs on my corner. Good — mine are tired of walking.' },
+      { who: 'marisol', text: 'A blue-top sedan sits outside Bar La Ola. Its owner owes me. Bring it to Dario\'s garage — quietly, if you can.' },
+      { who: 'runner', text: 'And if quiet is not on the menu?' },
+      { who: 'marisol', text: 'Then bring it loud, runner. Just bring it.' },
     ],
     stages: [
-      { kind: 'goto', at: PLACES.beachBar, radius: 7, objective: 'Head to Bar La Ola on Playa Brava', next: 'The owed sedan is parked by the bar' },
-      { kind: 'steal', at: { x: -224, z: -128 }, carType: 'sedan', objective: 'Take the marked sedan', next: 'Get in the car — E beside it' },
-      { kind: 'deliver', at: PLACES.garagePad, radius: 8, objective: 'Deliver the sedan to Dario’s garage pad', next: 'Park on the glowing pad' },
-      { kind: 'goto', at: PLACES.marisolCorner, radius: 6, objective: 'Report back to Marisol', next: 'She waits on the Marina Alta corner' },
+      { kind: 'goto', objective: 'Head to Bar La Ola on Playa Brava', next: 'The owed sedan is parked by the bar', at: 'barLaOla' },
+      { kind: 'steal', objective: 'Take the blue-top sedan', next: 'Bring it to Dario\'s garage — quietly, if you can', at: 'barLaOla' },
+      { kind: 'deliverCar', objective: 'Deliver the sedan to Dario\'s garage', next: 'Lose any tail before you roll in', at: 'garagePad' },
+      { kind: 'goto', objective: 'Collect your cut from Marisol', next: 'Back to the corner — she pays in person', at: 'marisolCorner' },
     ],
   },
   {
-    id: 'hot-delivery', title: 'Hot Delivery', giver: 'dario', startAt: PLACES.garagePad,
-    pay: 550, respect: 130,
+    title: 'Hot Delivery',
+    giver: 'tito',
+    reward: { cash: 520, respect: 90 },
+    unlock: 'smg',
     intro: [
-      L('dario', 'Runner! My cousin’s fish truck died with a load of casino chips in the back. Don’t ask.'),
-      L('dario', 'Take the Mulo at the warehouse, get it to the marina gate before the ice — and the story — melts.'),
-    ],
-    outro: [
-      L('dario', 'Still cold! You drive like the tide owes you money. I like it.'),
+      { who: 'tito', text: 'You drive like you have somewhere to be. I like that. I have crates that have somewhere to be.' },
+      { who: 'tito', text: 'Marina docks, my Fuego, one gate, no sightseeing. The clock is the whole conversation.' },
     ],
     stages: [
-      { kind: 'goto', at: PLACES.warehouse, radius: 9, objective: 'Pick up the loaded truck at Almacén 9', next: 'The Mulo is waiting by the warehouse doors' },
-      { kind: 'steal', at: { x: 228, z: 224 }, carType: 'truck', objective: 'Take the Mulo truck', next: 'Get in the truck' },
-      { kind: 'drive', at: PLACES.marinaGate, radius: 9, timer: 150, objective: 'Race the load to the marina gate', next: 'Beat the clock — the boulevard is fastest' },
-      { kind: 'goto', at: PLACES.garagePad, radius: 8, objective: 'Return to Dario’s garage', next: 'He owes you a cold drink and warm cash' },
+      { kind: 'goto', objective: 'Pick up the load at the marina docks', next: 'Tito is waiting by the crates', at: 'marinaDock' },
+      { kind: 'goto', objective: 'Take the wheel of the loaded Fuego', next: 'Keep it clean on the boulevard', at: 'marinaDock' },
+      { kind: 'timed', objective: 'Race the load to the marina gate', next: 'Beat the clock — the boulevard is fastest', at: 'marinaGate', time: 95 },
+      { kind: 'goto', objective: 'Return to Tito for the bonus', next: 'He pays extra if the paint is clean', at: 'raceStart' },
     ],
   },
   {
-    id: 'bay-runner', title: 'Bay Runner', giver: 'bruno', startAt: PLACES.marinaGate,
-    pay: 800, respect: 170,
+    title: 'Bay Runner',
+    giver: 'bruno',
+    reward: { cash: 640, respect: 120 },
     intro: [
-      L('bruno', 'Forty years I keep the lighthouse, and the sea keeps bringing me… opportunities.'),
-      L('bruno', 'Crates on the dock, friend. Take them to El Faro. The PAPD will object — object louder.'),
-    ],
-    outro: [
-      L('bruno', 'The light saw you come home safe. That is all an old smuggler asks.'),
+      { who: 'bruno', text: 'Marisol says your hands are steady. The bay at night eats unsteady hands.' },
+      { who: 'bruno', text: 'Crates go up to El Faro. Any wheels will do — lose the tail if you can.' },
     ],
     stages: [
-      { kind: 'pickup', at: PLACES.marinaDock, radius: 6, objective: 'Load the crates at the marina docks', next: 'On foot, between the piers', heat: 3 },
-      { kind: 'drive', at: PLACES.lighthouse, radius: 10, anyCar: true, objective: 'Run the crates up to El Faro', next: 'Any wheels will do — lose the tail if you can' },
-      { kind: 'escape', objective: 'Lose the PAPD completely', next: 'Break line of sight and keep moving' },
-      { kind: 'goto', at: PLACES.marinaGate, radius: 8, objective: 'Meet Bruno at the marina gate', next: 'He pays in old bills and older stories' },
+      { kind: 'goto', objective: 'Take Bruno\'s brief at the marina', next: 'A quiet job, he says', at: 'marinaDock' },
+      { kind: 'timed', objective: 'Run the crates up to El Faro', next: 'Any wheels will do — lose the tail if you can', at: 'lighthouse', time: 150 },
+      { kind: 'escape', objective: 'Lose the PAPD tail', next: 'Break their sight line — alleys are your friend', at: 'lighthouse' },
+      { kind: 'goto', objective: 'Drop word at the El Faro cache', next: 'Bruno counts every box', at: 'lighthouse' },
     ],
   },
   {
-    id: 'palma-showdown', title: 'Palma Showdown', giver: 'marisol', startAt: PLACES.marisolCorner,
-    pay: 950, respect: 200,
+    title: 'Palma Showdown',
+    giver: 'marisol',
+    reward: { cash: 800, respect: 160 },
+    unlock: 'shotgun',
     intro: [
-      L('marisol', 'The Red Sails crew thinks my corner is theirs now. They gather in the Callejón de las Redes.'),
-      L('marisol', 'Teach them geography, runner. Bring a real gun — the Kobra if your name has earned it, the Muelle if it has earned more.'),
-      L('runner', 'And when the PAPD answers the noise?'),
-      L('marisol', 'Then the alley has two lessons to teach. Be quick with both.'),
-    ],
-    outro: [
-      L('marisol', 'The alley is quiet and the corner is mine. Puerto Alba is learning your name.'),
+      { who: 'marisol', text: 'The Red Sails want my alley and call it a parley. You know what a parley is, in the old port?' },
+      { who: 'runner', text: 'An ambush with better manners.' },
+      { who: 'marisol', text: 'Then you are dressed correctly. Go and be polite.' },
     ],
     stages: [
-      { kind: 'goto', at: PLACES.alleyShootout, radius: 10, objective: 'Go to the Callejón de las Redes', next: 'Viejo Puerto — past the district sign, behind the net lofts' },
-      { kind: 'shootout', at: PLACES.alleyShootout, count: 5, objective: 'Clear out the Red Sails crew', next: 'All of them down — watch the crossfire' },
-      { kind: 'escape', objective: 'Shake any heat from the gunfight', next: 'Gone and forgotten, like the Red Sails' },
-      { kind: 'goto', at: PLACES.marisolCorner, radius: 6, objective: 'Report back to Marisol', next: 'Marina Alta corner' },
+      { kind: 'goto', objective: 'Meet the Red Sails at the old-port alley', next: 'They say it is a parley', at: 'alleyShootout' },
+      { kind: 'fight', objective: 'Survive the ambush', next: 'Hold the alley — nobody runs', at: 'alleyShootout', hostiles: 5 },
+      { kind: 'escape', objective: 'Shake any heat from the gunfight', next: 'Gone and forgotten, like the Red Sails', at: 'alleyShootout' },
+      { kind: 'goto', objective: 'Report back to Marisol', next: 'Tell her the alley is quiet again', at: 'marisolCorner' },
     ],
   },
   {
-    id: 'street-crown', title: 'Street Crown', giver: 'tito', startAt: PLACES.raceStart,
-    pay: 700, respect: 180,
+    title: 'Street Crown',
+    giver: 'tito',
+    reward: { cash: 700, respect: 150 },
     intro: [
-      L('tito', 'Everybody talks about the runner. I talk with my right foot. Boulevard, eight gates, my crown on the line.'),
-      L('tito', 'Any car. Any trick. Just be first through the last gate before the clock dies.'),
-    ],
-    outro: [
-      L('tito', 'The crown is yours. Wear it loud — the boulevard respects loud.'),
+      { who: 'tito', text: 'Three legs, one crown, every light on the boulevard watching. You wear it or I keep it.' },
+      { who: 'tito', text: 'Hit every checkpoint. The city is the track; the PAPD are just scenery with sirens.' },
     ],
     stages: [
-      { kind: 'goto', at: PLACES.raceStart, radius: 7, objective: 'Meet Tito at the south boulevard lights', next: 'Bring something quick' },
-      {
-        kind: 'race', timer: 165, objective: 'Win the boulevard crown race', next: 'Every gold gate, in order',
-        checkpoints: [
-          { x: -212, z: 40 }, { x: -212, z: -60 }, { x: -212, z: -180 }, { x: -160, z: -220 },
-          { x: -40, z: -220 }, { x: 80, z: -160 }, { x: 80, z: -40 }, { x: -40, z: 20 },
-        ],
-      },
-      { kind: 'goto', at: PLACES.raceStart, radius: 8, objective: 'Collect from Tito', next: 'South boulevard lights' },
+      { kind: 'goto', objective: 'Head to Tito\'s start line on the boulevard', next: 'The flag drops when you roll in', at: 'raceStart' },
+      { kind: 'race', objective: 'Run the checkpoint crown — leg one', next: 'North lights, then the lighthouse climb', leg: 0 },
+      { kind: 'race', objective: 'Leg two — the old port climb', next: 'Across the south roads, no shortcuts through shops', leg: 1 },
+      { kind: 'race', objective: 'Final leg — bring it home', next: 'The crown is heavy. Drive like it is yours', leg: 2 },
     ],
   },
   {
-    id: 'cab-confessions', title: 'Cab Confessions', giver: 'dario', startAt: PLACES.garagePad,
-    pay: 650, respect: 150,
+    title: 'Fares of Puerto Alba',
+    giver: 'dario',
+    reward: { cash: 90, respect: 25 },
     intro: [
-      L('dario', 'My taxi driver quit — something about “bullets in the upholstery”. Three fares are waiting, runner.'),
-      L('dario', 'The cab is out front. Drive gentle; passengers tip, corpses don’t.'),
-    ],
-    outro: [
-      L('dario', 'Five stars, they said! I may frame the reviews. Or the dents. Both.'),
+      { who: 'dario', text: 'Half this city owes me a ride and the other half owes me money. You can fix one of those.' },
+      { who: 'dario', text: 'Pick them up, drop them off, keep the paint on. The meter is honest even if I am not.' },
     ],
     stages: [
-      { kind: 'steal', at: { x: -196, z: -52 }, carType: 'taxi', objective: 'Take the Taxi Alba cab', next: 'It is parked by the garage' },
-      {
-        kind: 'fare', objective: 'Work the three waiting fares', next: 'Gold marker: pickup. Blue marker: dropoff',
-        pairs: [
-          { from: PLACES.plaza, to: PLACES.hospital, fareName: 'a nurse off shift' },
-          { from: PLACES.policeStation, to: PLACES.beachBar, fareName: 'an off-duty officer (awkward)' },
-          { from: PLACES.marinaGate, to: PLACES.garagePad, fareName: 'a sailor with one bag and no past' },
-        ],
-      },
-      { kind: 'goto', at: PLACES.garagePad, radius: 8, objective: 'Bring the cab home', next: 'Park it by the garage' },
+      { kind: 'fare', objective: 'Work the taxi fares', next: 'Every fare is cash in the door', fares: 2 },
+      { kind: 'fare', objective: 'Keep the fares coming', next: 'The night shift pays better', fares: 2 },
+      { kind: 'fare', objective: 'The last fares of the shift', next: 'Dario splits the take at the garage', fares: 2 },
+      { kind: 'goto', objective: 'Settle up at Dario\'s garage', next: 'He counts twice and pays once', at: 'garagePad' },
     ],
   },
   {
-    id: 'condors-prey', title: 'Condor’s Prey', giver: 'bruno', startAt: PLACES.marinaGate,
-    pay: 1200, respect: 230,
+    title: 'Takedown',
+    giver: 'dario',
+    reward: { cash: 900, respect: 180 },
     intro: [
-      L('bruno', 'A courier carries my sea-charts to sell to the Red Sails. A Fuego GT, fast as gossip.'),
-      L('bruno', 'Stop the car, take the case, bring it to Dario. If FALCON-1 wakes, you are on your own — as ever.'),
-    ],
-    outro: [
-      L('bruno', 'My charts come home. The sea keeps its secrets, and so do we.'),
+      { who: 'dario', text: 'A courier is moving my parts in my own truck and charging me rent for the privilege.' },
+      { who: 'dario', text: 'Find him, lean on him, and bring my Carguero home. The parts are fragile. He is not.' },
     ],
     stages: [
-      { kind: 'goto', at: { x: 140, z: 200 }, radius: 12, objective: 'Find the courier’s Fuego GT in Viejo Puerto', next: 'It cruises the south avenues' },
-      { kind: 'chase', carType: 'sport', objective: 'Run down the Fuego GT and disable it', next: 'Ram it, shoot the tires — stop it any way' },
-      { kind: 'pickup', at: null, radius: 4, objective: 'Take the chart case from the wreck', next: 'On foot, beside the stopped car', heat: 2 },
-      { kind: 'deliver', at: PLACES.garagePad, radius: 8, anyCar: true, objective: 'Deliver the case to Dario’s garage', next: 'Any car — just get it there' },
+      { kind: 'goto', objective: 'Find the courier\'s trail at the hospital', next: 'He makes the pharmacy run at dusk', at: 'hospital' },
+      { kind: 'takedown', objective: 'Run the courier down', next: 'Ram him out — the truck must survive', at: 'hospital' },
+      { kind: 'deliverCar', objective: 'Bring the Carguero back to the garage', next: 'Dario is watching the gate', at: 'garagePad' },
+      { kind: 'goto', objective: 'Face Dario\'s gratitude', next: 'It sounds like complaining. It is not', at: 'garagePad' },
     ],
   },
   {
-    id: 'bahia-heat', title: 'Bahia Heat', giver: 'marisol', startAt: PLACES.marisolCorner,
-    pay: 2500, respect: 400,
+    title: 'Kingpin\'s Gambit',
+    giver: 'marisol',
+    reward: { cash: 1600, respect: 320 },
     intro: [
-      L('marisol', 'One last run, and Puerto Alba is ours. The port authority’s payroll boat lands tonight — cash, runner, a whole season of it.'),
-      L('marisol', 'Take the case from El Faro, hold the marina against the Red Sails, then vanish. Capitán Ojeda will throw the whole sky at you.'),
-      L('runner', 'Then I will drive under a different sky. Let’s finish this.'),
-    ],
-    outro: [
-      L('marisol', 'Look at that sunset, Kingpin. Puerto Alba is yours — every dock, every corner, every tide.'),
-      L('bruno', 'The light will tell this story for forty years. I will make sure it tells it right.'),
+      { who: 'marisol', text: 'One last favour, and then the corner is yours whenever you want it. The whole city will watch.' },
+      { who: 'marisol', text: 'Take the harbourmaster\'s car from under FALCON-1\'s nose and park it at my door. Five stars, runner. Earn them.' },
     ],
     stages: [
-      { kind: 'pickup', at: PLACES.lighthouse, radius: 7, objective: 'Take the payroll case at El Faro', next: 'On foot, at the lighthouse door', heat: 4 },
-      { kind: 'drive', at: PLACES.marinaGate, radius: 9, anyCar: true, timer: 170, objective: 'Get the case to the marina', next: 'The whole PAPD is awake — move!' },
-      { kind: 'shootout', at: PLACES.marinaDock, count: 4, objective: 'Hold the docks against the Red Sails', next: 'Keep the case, clear the pier' },
-      { kind: 'escape', objective: 'Lose the PAPD for good', next: 'Out of the light, out of the story' },
+      { kind: 'steal', objective: 'Take the harbourmaster\'s sport at the station', next: 'Every camera in the PAPD is awake', at: 'policeStation', wanted: 5 },
+      { kind: 'escape', objective: 'Carry the heat across the city', next: 'They cannot bust what they cannot box', at: 'policeStation' },
+      { kind: 'deliverCar', objective: 'Park it at Marisol\'s door', next: 'The corner is watching', at: 'marisolCorner' },
+      { kind: 'goto', objective: 'Take your bow on the corner', next: 'Kingpin of Puerto Alba has a nice ring', at: 'marisolCorner' },
     ],
   },
 ];
