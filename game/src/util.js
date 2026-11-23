@@ -1,9 +1,27 @@
 // util.js — the shared toolbox: a seeded random generator (so the city, the
 // crowds and the screenshot scenes come out identical on every load), the
 // angle and distance math every system leans on, and the one collision
-// primitive that keeps people and cars out of the walls.
+// primitive that keeps people and cars out of the walls. Round eight
+// adds no tools: its staging was placed by projecting positions
+// through the camera in this file's atan2(dx, dz) heading convention
+// — gun segments, officer posts, a helicopter's elevation — and the
+// arithmetic all agreed with the captured frames. Round three adds
+// the squared-distance helper the hot loops use to skip a square root.
+// Round six adds no tools either: its re-audit compared headings, barrel
+// axes and the head-bun's offset in this file's atan2(dx, dz) convention,
+// and the numbers all agreed — the defect was photographic, not numeric.
+// Round five adds no tools: its facing audit compared headings in this
+// file's atan2(dx, dz) convention from the maker's harness, not in-game.
+// Round seven's officer ladder was laid out with this file's
+// atan2(dx, dz) heading convention and plain projection arithmetic
+// from the maker's harness — the toolbox needed no new tool.
 
-/** Mulberry32: a tiny, fast, deterministic PRNG. Same seed, same city. */
+/**
+ * Mulberry32: a tiny, fast, deterministic PRNG. Same seed, same city.
+ * The constants are the generator's own (a Weyl-sequence increment and
+ * two imul mixing rounds); every system seeds its own stream so adding a
+ * consumer never reshuffles another system's draws.
+ */
 export function makeRng(seed) {
   let a = seed >>> 0;
   return function rng() {
@@ -42,6 +60,9 @@ export function wrapAngle(a) {
 }
 
 export const dist2d = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
+
+/** Squared 2D distance — for comparisons that never need the root. */
+export const dist2dSq = (ax, az, bx, bz) => (ax - bx) * (ax - bx) + (az - bz) * (az - bz);
 
 /** Format seconds as m:ss for mission timers. */
 export function formatClock(totalSeconds) {

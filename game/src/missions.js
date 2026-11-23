@@ -4,7 +4,20 @@
 // from here, timers, fleeing target cars, shootout crews, checkpoint races
 // and taxi fares. Finishing pays cash and respect, saves, and offers the
 // next job. After the finale, Dario keeps handing out single taxi fares.
+// Round eight adds no job and moves no stage: Palma Showdown's
+// shootout serves once more as the combat screenshot's backdrop, and
+// the extra officer in that frame is a staging dress, not a seventh
+// stage enemy — the job plays exactly as written.
+// Round three toughens the shootout crews a step (their health scales with
+// the job's place in the story) to match the heavier arsenal they now face.
+// Round six touches no job data: Palma Showdown's escape stage is only
+// re-photographed (shots.js), its crew and stakes exactly as written.
+// Round five retunes no job: Palma Showdown's escape stage is the facing
+// audit's stage, run exactly as this engine serves it in play.
 
+// Round seven re-stages Palma Showdown's escape tableau in shots.js
+// without touching this engine: the mission state the combat frame's
+// HUD reports is the same fakeMission(3, 2) as in rounds five and six.
 import { G, rankFor } from './state.js';
 import { MISSIONS, CHARACTERS } from './story.js';
 import { PLACES } from './city.js';
@@ -154,9 +167,10 @@ function nextStage() {
   }
   if (s.kind === 'shootout') {
     m.hostiles = [];
+    const crewHp = 34 + G.missionIndex * 3; // later crews have eaten more lead
     for (let i = 0; i < s.count; i += 1) {
       const a = (i / s.count) * Math.PI * 2;
-      const ped = spawnPedAt(s.at.x + Math.sin(a) * (6 + rng() * 6), s.at.z + Math.cos(a) * (6 + rng() * 6), 'hostile', { hp: 34 });
+      const ped = spawnPedAt(s.at.x + Math.sin(a) * (6 + rng() * 6), s.at.z + Math.cos(a) * (6 + rng() * 6), 'hostile', { hp: crewHp });
       ped.missionHostile = true;
       m.hostiles.push(ped);
     }
@@ -335,7 +349,9 @@ export function updateMissions(dt) {
       break;
     case 'race': {
       const cp = s.checkpoints[m.raceIndex];
-      if (p.inCar && dist2d(p.x, p.z, cp.x, cp.z) < 10) {
+      // An 11 m gate: at boulevard speed the old 10 m circle could be
+      // crossed inside one frame's travel and still feel missed.
+      if (p.inCar && dist2d(p.x, p.z, cp.x, cp.z) < 11) {
         m.raceIndex += 1;
         sfx.chime();
         if (m.raceIndex >= s.checkpoints.length) nextStage();

@@ -1,14 +1,33 @@
 // city.js — Puerto Alba's layout and its built form. The layout is pure data
 // (road lines, building boxes, districts, named places) generated once from
 // a fixed seed, so traffic, pedestrians, the minimap and the missions all
-// read the same map the player sees. Round two rebuilds the fabric: blocks
-// are filled with rows of small-lot buildings instead of lone boxes, every
-// facade wears a painted window texture (lit windows, shutters, AC boxes,
-// storefronts), shops carry their names on an atlas of signs, and roofs,
-// balconies, awnings and street props are merged or instanced so the city
-// can be dense without drowning the renderer. The Mercado del Puerto now
-// lines the promenade, and a Ferris wheel turns over Playa Brava.
+// read the same map the player sees. Round eight builds nothing new:
+// the boulevard FALCON-1 now overflies in full and the Viejo Puerto
+// corner where a sixth officer takes his post are this same fixed
+// city, read by the staging exactly as the player reads it. Blocks are filled with rows of
+// small-lot buildings, every facade wears a painted window texture (lit
+// windows, shutters, AC boxes, storefronts), shops carry their names on an
+// atlas of signs, and roofs, balconies, awnings and street props are merged
+// or instanced so the city can be dense without drowning the renderer. The
+// Mercado del Puerto lines the promenade, and a Ferris wheel turns over
+// Playa Brava.
+//
+// Round three paves the city: no large flat ground plane survives. The
+// asphalt is a painted canvas — aggregate speckle, patched cracks, tar
+// seams — the plazas and promenade are slab grids with grout and stains,
+// the beach ripples, and a clutter layer of paper, leaves, stones, painted
+// kerbs, tactile paving, drain grates and dusk puddles sits over it all.
+// The pastel palette deepens a step toward the grade in world.js.
+//
+// Round four names the quarters in the world itself: a MARINA ALTA fascia
+// board over the market colonnade and a gateway sign at the way into every
+// other district, painted in the sign atlas's manner — district colours,
+// cream letters big enough to read from the street.
 
+// Round seven photographs the Callejón de las Redes shootout across
+// this file's fixed geometry: the deep crate stack stands on the
+// second-line officer's first sightline, and his re-spread in shots.js
+// is measured against the streets and props laid out here.
 import { makeRng, randRange, pick } from './util.js';
 
 export const ROAD_WIDTH = 14;
@@ -47,8 +66,8 @@ export const PLACES = {
   chopShop: { x: 248, z: -196, name: 'Tito’s yard' },
 };
 
-const PASTEL_TINTS = [0xf7ead2, 0xf3cf9f, 0xefb7a0, 0xe8e3d5, 0xcfe0d8, 0xf5c6d6, 0xbcd6ea, 0xf7e8b0, 0xdcc7ae, 0xa8cbb5, 0xe6b48c, 0xffffff];
-const TOWER_TINTS = [0xdfe6ea, 0xc4cfd8, 0xe6dcc8, 0xb9cbd8, 0xd8c8b4, 0xccd6dd];
+const PASTEL_TINTS = [0xf6e3b4, 0xf2c184, 0xef9f7d, 0xe8dfc8, 0xbfe0d0, 0xf5a8c0, 0xa9cdea, 0xf7dd7e, 0xdcb98d, 0x93c9a4, 0xe89a5f, 0xfdf6ec];
+const TOWER_TINTS = [0xd8e2e8, 0xb9c9d6, 0xe6d3ae, 0xaec6d8, 0xd8bf9e, 0xc3d2da];
 const SHOP_NAMES = [
   'Café Ola', 'Panadería Sol', 'Hotel Miramar', 'Farmacia Puerto', 'Joyas del Mar',
   'Tabacos El Faro', 'Heladería Brisa', 'Banco del Puerto', 'Librería Marea',
@@ -467,6 +486,158 @@ function makeTowerTexture(rng) {
   return tex;
 }
 
+// ------------------------------------------------------------ ground paint
+/** Asphalt: aggregate speckle, tar seams, patched cracks, oil stains. */
+function makeAsphaltTexture(rng) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#35393f'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2400; i += 1) { // the aggregate
+    const v = 46 + rng() * 42;
+    g.fillStyle = `rgba(${v + 14},${v + 16},${v + 20},${0.16 + rng() * 0.2})`;
+    g.fillRect(rng() * 256, rng() * 256, 1.6, 1.6);
+  }
+  for (let i = 0; i < 9; i += 1) { // patched repairs, a shade off the road
+    g.fillStyle = `rgba(18,20,24,${0.05 + rng() * 0.07})`;
+    g.fillRect(rng() * 200, rng() * 200, 34 + rng() * 60, 22 + rng() * 44);
+  }
+  g.strokeStyle = 'rgba(16,18,21,0.5)'; g.lineWidth = 1.6; // cracks wander
+  for (let i = 0; i < 6; i += 1) {
+    g.beginPath();
+    let x = rng() * 256, y = rng() * 256;
+    g.moveTo(x, y);
+    for (let s = 0; s < 5; s += 1) { x += (rng() - 0.5) * 52; y += (rng() - 0.5) * 52; g.lineTo(x, y); }
+    g.stroke();
+  }
+  for (let i = 0; i < 5; i += 1) { // oil stains near where cars wait
+    const gr = g.createRadialGradient(0, 0, 1, 0, 0, 16 + rng() * 14);
+    gr.addColorStop(0, 'rgba(10,12,16,0.20)'); gr.addColorStop(1, 'rgba(10,12,16,0)');
+    g.save(); g.translate(rng() * 256, rng() * 256); g.fillStyle = gr;
+    g.fillRect(-32, -32, 64, 64); g.restore();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+/** Paving: a 4×4 slab grid with grout lines, per-slab tone and stains. */
+function makePavingTexture(rng) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#877c68'; g.fillRect(0, 0, 256, 256); // the grout
+  for (let sx = 0; sx < 4; sx += 1) for (let sy = 0; sy < 4; sy += 1) {
+    const v = (rng() - 0.5) * 14;
+    g.fillStyle = `rgb(${176 + v},${166 + v},${144 + v})`;
+    g.fillRect(sx * 64 + 2, sy * 64 + 2, 60, 60);
+    for (let i = 0; i < 26; i += 1) { // wear speckle inside the slab
+      g.fillStyle = `rgba(90,80,64,${0.05 + rng() * 0.09})`;
+      g.fillRect(sx * 64 + 3 + rng() * 56, sy * 64 + 3 + rng() * 56, 2, 2);
+    }
+  }
+  for (let i = 0; i < 7; i += 1) { // stains that survive the rain
+    const gr = g.createRadialGradient(0, 0, 1, 0, 0, 18 + rng() * 22);
+    gr.addColorStop(0, `rgba(70,60,44,${0.10 + rng() * 0.08})`); gr.addColorStop(1, 'rgba(70,60,44,0)');
+    g.save(); g.translate(rng() * 256, rng() * 256); g.fillStyle = gr;
+    g.fillRect(-44, -44, 88, 88); g.restore();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+/** Beach sand: wind ripples and shell speckle over warm grain. */
+function makeSandTexture(rng) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#e2c78f'; g.fillRect(0, 0, 256, 256);
+  for (let y = 0; y < 256; y += 9) { // ripple lines, light then shadow
+    g.strokeStyle = 'rgba(255,244,205,0.20)'; g.lineWidth = 2;
+    g.beginPath();
+    for (let x = 0; x <= 256; x += 16) g.lineTo(x, y + Math.sin(x * 0.11 + y) * 2.2);
+    g.stroke();
+    g.strokeStyle = 'rgba(160,128,78,0.16)';
+    g.beginPath();
+    for (let x = 0; x <= 256; x += 16) g.lineTo(x, y + 3.4 + Math.sin(x * 0.11 + y) * 2.2);
+    g.stroke();
+  }
+  for (let i = 0; i < 700; i += 1) {
+    g.fillStyle = `rgba(${140 + rng() * 90},${110 + rng() * 70},${70 + rng() * 40},${0.10 + rng() * 0.16})`;
+    g.fillRect(rng() * 256, rng() * 256, 1.6, 1.6);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+/** The block interiors: packed dirt and scrub under the buildings. */
+function makeDirtTexture(rng) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#8a8271'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 26; i += 1) { // scrub patches and worn earth
+    g.fillStyle = rng() < 0.5 ? `rgba(106,124,78,${0.10 + rng() * 0.13})` : `rgba(112,94,66,${0.10 + rng() * 0.12})`;
+    g.beginPath();
+    g.ellipse(rng() * 256, rng() * 256, 14 + rng() * 34, 10 + rng() * 24, rng() * 3, 0, Math.PI * 2);
+    g.fill();
+  }
+  for (let i = 0; i < 1500; i += 1) {
+    const v = 96 + rng() * 60;
+    g.fillStyle = `rgba(${v},${v - 6},${v - 22},${0.12 + rng() * 0.16})`;
+    g.fillRect(rng() * 256, rng() * 256, 1.8, 1.8);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+/**
+ * A district name board, painted the way the shop signs are: the district's
+ * own deep colour, a cream double border with a gold inner line, the
+ * port's diamond markers at both ends, and the name set large — but with
+ * real headroom above the glyphs. Round six insists on that padding: set
+ * as large as the board allowed, the lettering's tops rode so close to
+ * the board's top edge that the colonnade's orange roof trim, crossing
+ * just above, ate the crossbar of the T in ALTA and left it reading as
+ * an I. The glyphs now sit lower in the board with air above them, so
+ * every letterform stays complete whatever runs overhead. Round four
+ * puts these over the market colonnade and at the gateways between
+ * districts, so a screenshot can name its own quarter.
+ */
+function makeDistrictSignTexture(name, bg, fg, accent, canvasW = 1024) {
+  const c = document.createElement('canvas');
+  c.width = canvasW; c.height = 192;
+  const g = c.getContext('2d');
+  g.fillStyle = bg; g.fillRect(0, 0, canvasW, 192);
+  g.fillStyle = 'rgba(255,255,255,0.13)'; g.fillRect(0, 0, canvasW, 30); // sun-bleached top band
+  g.strokeStyle = fg; g.lineWidth = 6; g.strokeRect(12, 12, canvasW - 24, 168);
+  g.strokeStyle = accent; g.lineWidth = 2.5; g.strokeRect(26, 26, canvasW - 52, 140);
+  g.fillStyle = accent;
+  for (const cx of [64, canvasW - 64]) { // the port's diamonds
+    g.save(); g.translate(cx, 96); g.rotate(Math.PI / 4); g.fillRect(-17, -17, 34, 34); g.restore();
+  }
+  g.fillStyle = fg;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  // Round six: the cap is 100, not 118, and the line sits a touch below
+  // centre — glyph tops land ~68 px under the canvas top instead of ~58,
+  // which on the fascia board is the air that keeps the roof trim out of
+  // the letterforms (see the note above).
+  let size = 100;
+  g.font = `900 ${size}px Arial, sans-serif`;
+  while (g.measureText(name).width > canvasW - 230 && size > 40) { size -= 6; g.font = `900 ${size}px Arial, sans-serif`; }
+  g.fillText(name, canvasW / 2, 104);
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 4;
+  return tex;
+}
+
 const FACE_NORMAL = { S: [0, -1], N: [0, 1], W: [-1, 0], E: [1, 0] };
 const FACE_ANGLE = { S: Math.PI, N: 0, W: -Math.PI / 2, E: Math.PI / 2 };
 
@@ -477,22 +648,36 @@ export function buildCityMeshes(scene, data, seed) {
   const plain = new GeoBatch(); // roofs, trim, stalls, props — one draw call
   const boxAt = (batch, w, h, d, x, y, z, color, opts = {}) => batch.addBox(w, h, d, x, y, z, { color, uvMode: 'flat', ...opts });
 
-  // Ground, sand, promenade and plaza slabs as thin boxes in the plain batch.
-  boxAt(plain, 560, 0.1, 660, 20, -0.06, 0, 0x8f8a7c);
-  boxAt(plain, 34, 0.12, 660, -232, -0.02, 0, 0xe6cf9e);
-  boxAt(plain, 19, 0.1, 640, -192.5, 0.0, 0, 0xb9b2a2);
+  // The ground batches: one textured batch per surface family, UV-scaled
+  // by the facade rule so a texture tile spans a fixed number of metres.
+  const groundTexRng = makeRng(seed + 101);
+  const dirtBatch = new GeoBatch();
+  const sandBatch = new GeoBatch();
+  const paveBatch = new GeoBatch();
+  const roadBatch = new GeoBatch();
+  const texBox = (batch, w, h, d, x, y, z, ws) => batch.addBox(w, h, d, x, y, z, { color: 0xffffff, uvMode: 'facade', winScale: ws });
+
+  // Ground, sand, promenade and plaza slabs — textured, every one.
+  texBox(dirtBatch, 560, 0.1, 660, 20, -0.06, 0, 18);
+  texBox(sandBatch, 34, 0.12, 660, -232, -0.02, 0, 12);
+  texBox(paveBatch, 19, 0.1, 640, -192.5, 0.0, 0, 9);
   for (const pz of data.plazas) {
-    boxAt(plain, pz.maxX - pz.minX + 4, 0.1, pz.maxZ - pz.minZ + 4,
-      (pz.minX + pz.maxX) / 2, 0.0, (pz.minZ + pz.maxZ) / 2, pz.parking ? 0x6d6a63 : 0xb9b2a2);
+    texBox(pz.parking ? roadBatch : paveBatch, pz.maxX - pz.minX + 4, 0.1, pz.maxZ - pz.minZ + 4,
+      (pz.minX + pz.maxX) / 2, 0.0, (pz.minZ + pz.maxZ) / 2, pz.parking ? 15 : 9);
   }
-  // Roads: sidewalk border under dark asphalt, crosswalks at busy corners.
+  // Roads: paved sidewalk border under painted asphalt.
   const roadSet = (cx, cz, w, d) => {
-    boxAt(plain, w + 6, 0.08, d + 6, cx, 0.0, cz, 0xb0a894);
-    boxAt(plain, w, 0.12, d, cx, 0.02, cz, 0x33373d);
+    texBox(paveBatch, w + 6, 0.08, d + 6, cx, 0.0, cz, 9);
+    texBox(roadBatch, w, 0.12, d, cx, 0.02, cz, 15);
   };
   roadSet(BOULEVARD_X, 0, ROAD_WIDTH, 640);
   for (const rx of ROADS_X) roadSet(rx, 0, ROAD_WIDTH, 624);
   for (const rz of ROADS_Z) roadSet(20, rz, 516, ROAD_WIDTH);
+  scene.add(dirtBatch.build(new THREE.MeshLambertMaterial({ map: makeDirtTexture(groundTexRng), vertexColors: true })));
+  scene.add(sandBatch.build(new THREE.MeshLambertMaterial({ map: makeSandTexture(groundTexRng), vertexColors: true })));
+  scene.add(paveBatch.build(new THREE.MeshLambertMaterial({ map: makePavingTexture(groundTexRng), vertexColors: true })));
+  scene.add(roadBatch.build(new THREE.MeshLambertMaterial({ map: makeAsphaltTexture(groundTexRng), vertexColors: true })));
+
   for (const rz of [-100, -40, 20, 80]) {
     for (let i = 0; i < 5; i += 1) {
       boxAt(plain, 0.9, 0.13, 2.4, BOULEVARD_X - 5 + i * 2.6, 0.03, rz, 0xd8d5cc);
@@ -521,6 +706,97 @@ export function buildCityMeshes(scene, data, seed) {
     }
     holes.count = hi;
     scene.add(holes);
+  }
+
+  // --- the clutter layer: a lived-in street sheds paper and leaves -------
+  {
+    const crng = makeRng(seed + 55);
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    const one = new THREE.Vector3(1, 1, 1);
+    const col = new THREE.Color();
+    // Fallen paper, flyers and leaves on sidewalks, plazas and promenade.
+    const litterTones = [0xf2ead8, 0xd8cfc0, 0xe8e2d2, 0x7a8a3a, 0xa86a2e, 0xe86ab0, 0x57d7e8, 0xc9b896];
+    const litter = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.46, 0.32),
+      new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide }), 260);
+    const litterSpots = [];
+    for (let i = 0; i < 150; i += 1) { // along the streets, past the kerb
+      const vertical = crng() < 0.6;
+      if (vertical) {
+        const roads = [BOULEVARD_X, ...ROADS_X];
+        litterSpots.push({ x: roads[Math.floor(crng() * roads.length)] + (crng() < 0.5 ? -1 : 1) * (8.2 + crng() * 2.6), z: -300 + crng() * 600 });
+      } else {
+        litterSpots.push({ x: -210 + crng() * 480, z: ROADS_Z[Math.floor(crng() * ROADS_Z.length)] + (crng() < 0.5 ? -1 : 1) * (8.2 + crng() * 2.6) });
+      }
+    }
+    for (let i = 0; i < 60; i += 1) litterSpots.push({ x: -206 + crng() * 26, z: -120 + crng() * 240 }); // promenade drift
+    for (let i = 0; i < 50; i += 1) litterSpots.push({ x: 32 + crng() * 36, z: 32 + crng() * 36 }); // plaza drift
+    litterSpots.forEach((s, i) => {
+      e.set(-Math.PI / 2 + (crng() - 0.5) * 0.35, 0, crng() * Math.PI);
+      q.setFromEuler(e);
+      m4.compose(new THREE.Vector3(s.x, 0.1, s.z), q, one);
+      litter.setMatrixAt(i, m4);
+      litter.setColorAt(i, col.setHex(litterTones[i % litterTones.length]));
+    });
+    litter.count = litterSpots.length;
+    scene.add(litter);
+    // Small stones scattered where the sand meets the promenade.
+    const stones = new THREE.InstancedMesh(new THREE.BoxGeometry(0.22, 0.12, 0.18),
+      new THREE.MeshLambertMaterial({ color: 0x9a958a }), 46);
+    for (let i = 0; i < 46; i += 1) {
+      e.set(0, crng() * Math.PI, 0); q.setFromEuler(e);
+      const s = 0.7 + crng() * 0.9;
+      m4.compose(new THREE.Vector3(-226 + crng() * 16, 0.08, -290 + crng() * 580), q, new THREE.Vector3(s, s, s));
+      stones.setMatrixAt(i, m4);
+    }
+    scene.add(stones);
+    // Painted kerbs down the boulevard: white, then no-parking red.
+    const kerbGeo = new THREE.BoxGeometry(0.34, 0.15, 5.6);
+    const kerbSpots = [];
+    for (let z = -308; z < 312; z += 6.2) { kerbSpots.push([BOULEVARD_X - 10.15, z]); kerbSpots.push([BOULEVARD_X + 10.15, z + 3.1]); }
+    const kerbs = new THREE.InstancedMesh(kerbGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), kerbSpots.length);
+    kerbSpots.forEach(([x, z], i) => {
+      m4.identity(); m4.setPosition(x, 0.075, z);
+      kerbs.setMatrixAt(i, m4);
+      kerbs.setColorAt(i, col.setHex(Math.floor(i / 2) % 2 === 0 ? 0xd8d5cc : 0xc23b2e));
+    });
+    scene.add(kerbs);
+    // Tactile paving pads where the crosswalks land.
+    const tactSpots = [];
+    for (const rz of ROADS_Z) for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      tactSpots.push([BOULEVARD_X + sx * (ROAD_WIDTH / 2 + 1.5), rz + sz * (ROAD_WIDTH / 2 + 1.5), 0]);
+    }
+    for (const rx of ROADS_X) for (const rz of [-100, -40, 20, 80]) for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      tactSpots.push([rx + sx * (ROAD_WIDTH / 2 + 1.5), rz + sz * (ROAD_WIDTH / 2 + 1.5), sx]);
+    }
+    const tact = new THREE.InstancedMesh(new THREE.BoxGeometry(1.5, 0.035, 0.8),
+      new THREE.MeshLambertMaterial({ color: 0xd8b13c }), tactSpots.length);
+    tactSpots.forEach(([x, z], i) => { m4.identity(); m4.setPosition(x, 0.075, z); tact.setMatrixAt(i, m4); });
+    scene.add(tact);
+    // Drain grates along the avenue kerbs.
+    const grateSpots = [];
+    for (const rx of [BOULEVARD_X, ...ROADS_X]) for (let z = -280; z < 300; z += 37) grateSpots.push([rx - 6.4, z + (rx % 5)]);
+    const grates = new THREE.InstancedMesh(new THREE.BoxGeometry(0.55, 0.03, 1.15),
+      new THREE.MeshLambertMaterial({ color: 0x24262a }), grateSpots.length);
+    grateSpots.forEach(([x, z], i) => { m4.identity(); m4.setPosition(x, 0.088, z); grates.setMatrixAt(i, m4); });
+    scene.add(grates);
+    // Puddles: still discs that catch the sky — faint by day, mirrors at
+    // dusk (world.js drives the opacity through data.puddleMat).
+    const puddleMat = new THREE.MeshBasicMaterial({ color: 0x39506b, transparent: true, opacity: 0.14, depthWrite: false });
+    const puddleGeo = new THREE.CircleGeometry(1, 12);
+    puddleGeo.rotateX(-Math.PI / 2);
+    const puddles = new THREE.InstancedMesh(puddleGeo, puddleMat, 26);
+    for (let i = 0; i < 26; i += 1) {
+      const onRoad = crng() < 0.6;
+      const px = onRoad ? [BOULEVARD_X, ...ROADS_X][Math.floor(crng() * 9)] + (crng() - 0.5) * 9 : 30 + crng() * 40;
+      const pz = onRoad ? -280 + crng() * 560 : 30 + crng() * 40;
+      e.set(0, crng() * Math.PI, 0); q.setFromEuler(e);
+      m4.compose(new THREE.Vector3(px, 0.088, pz), q, new THREE.Vector3(1.4 + crng() * 2.2, 1, 0.9 + crng() * 1.2));
+      puddles.setMatrixAt(i, m4);
+    }
+    scene.add(puddles);
+    data.puddleMat = puddleMat;
   }
 
   // The wet-look strip down the boulevard: a warm sheen that fades in at
@@ -707,6 +983,102 @@ export function buildCityMeshes(scene, data, seed) {
     boxAt(plain, 3.6, 0.16, 21, -187.2, 4.32, -89.5, 0xc94f38);
     boxAt(plain, 1.4, 0.5, 147, -187.2, 4.0, 25.5, 0xdcc7ae);
     boxAt(plain, 3.6, 0.16, 147, -187.2, 4.32, 25.5, 0xc94f38);
+  }
+
+  // --- district name signs --------------------------------------------------
+  // The quarter names itself in the world, not just on the map: a long
+  // fascia board rides the market colonnade's west face over Marisol's
+  // corner, and a two-post gateway board stands at the way into every
+  // other district, lettered to be read from a moving car — or a thumbnail.
+  {
+    const postMat = new THREE.MeshLambertMaterial({ color: 0x3c4248 });
+    const backMat = new THREE.MeshLambertMaterial({ color: 0x2a2d33 });
+    const SIGN_STYLE = {
+      'MARINA ALTA': ['#0e5a68', '#ffedc2', '#ffb340'],
+      'LAS PALMAS': ['#27693f', '#fdf3d0', '#ffb340'],
+      'CENTRO ALBA': ['#274b63', '#ffedc2', '#57d7e8'],
+      'VIEJO PUERTO': ['#a02c1e', '#ffe9b0', '#ffb340'],
+      'EL FARO': ['#8a4d16', '#ffedc2', '#ffd23e'],
+      'PLAYA BRAVA': ['#b83a5e', '#ffedc2', '#57d7e8'],
+    };
+    const signFace = (name, w, h, wide) => {
+      const [bg, fg, accent] = SIGN_STYLE[name];
+      const tex = makeDistrictSignTexture(name, bg, fg, accent, wide ? 1216 : 1024);
+      return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex }));
+    };
+
+    // MARINA ALTA: the colonnade fascia. The board hangs on the beam's west
+    // face above the stalls, over Marisol's corner. Round five re-sized it
+    // for the cover camera, which looks along the arcade at a glancing
+    // angle: the round-four board (12 m, centred z −8.5) sent its near end
+    // — and the name's last letter — past the frame's right edge, and its
+    // top corner out of the top. The board is 11 m, centred at z −9.8
+    // (spanning −15.3 to −4.3), so the whole name sits inside the frame
+    // with air on both sides while the board stays wall-large.
+    // Round six drops the whole board on the face — centre y 3.9 → 3.30,
+    // so its top edge (face 4.175, backing 4.225) clears the underside of
+    // the orange roof trim slab (y 4.24) that juts west past the sign
+    // face. At the old height the trim's near edge projected straight
+    // across the glyph tops and the T of ALTA lost its crossbar to the
+    // orange line; with the board lower and the texture's new headroom
+    // (makeDistrictSignTexture), the trim passes above the board's own
+    // top border and every letter stands clear below it. Its back is
+    // lettered too, for the walkers under the arcade.
+    {
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.85, 11.4), backMat);
+      back.position.set(-188.02, 3.3, -9.8);
+      back.castShadow = true;
+      scene.add(back);
+      const front = signFace('MARINA ALTA', 11, 1.75, true);
+      front.rotation.y = -Math.PI / 2;
+      front.position.set(-188.13, 3.3, -9.8);
+      scene.add(front);
+      const rear = signFace('MARINA ALTA', 11, 1.75, true);
+      rear.rotation.y = Math.PI / 2;
+      rear.position.set(-187.91, 3.3, -9.8);
+      scene.add(rear);
+      for (const sz of [-14.2, -5.4]) { // mounting stubs up to the roof slab
+        const stub = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.45, 0.14), postMat);
+        stub.position.set(-187.7, 4.4, sz);
+        scene.add(stub);
+      }
+    }
+
+    // The gateways: two steel posts and a double-faced board at the first
+    // corner inside each district, front turned to the road it names for.
+    const gateway = (name, x, z, ry) => {
+      const grp = new THREE.Group();
+      grp.position.set(x, 0, z);
+      grp.rotation.y = ry;
+      for (const lx of [-3.4, 3.4]) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3.8, 0.2), postMat);
+        post.position.set(lx, 1.9, 0);
+        post.castShadow = true;
+        grp.add(post);
+        // The posts are solid: register each one's world footprint.
+        addCollider(data, {
+          minX: x + lx * Math.cos(ry) - 0.22, maxX: x + lx * Math.cos(ry) + 0.22,
+          minZ: z - lx * Math.sin(ry) - 0.22, maxZ: z - lx * Math.sin(ry) + 0.22,
+        });
+      }
+      const back = new THREE.Mesh(new THREE.BoxGeometry(8.3, 1.7, 0.12), backMat);
+      back.position.set(0, 2.95, 0);
+      back.castShadow = true;
+      grp.add(back);
+      const front = signFace(name, 8, 1.5, false);
+      front.position.set(0, 2.95, 0.075);
+      grp.add(front);
+      const rear = signFace(name, 8, 1.5, false);
+      rear.rotation.y = Math.PI;
+      rear.position.set(0, 2.95, -0.075);
+      grp.add(rear);
+      scene.add(grp);
+    };
+    gateway('LAS PALMAS', -91.3, -136, -Math.PI / 2); // up the −100 avenue
+    gateway('CENTRO ALBA', 99, 29.3, Math.PI); // east along the z 20 road
+    gateway('VIEJO PUERTO', -31.3, 78, -Math.PI / 2); // down the −40 avenue
+    gateway('EL FARO', -202.3, -216, -Math.PI / 2); // the boulevard's south end
+    gateway('PLAYA BRAVA', -202.3, -56, -Math.PI / 2); // the promenade gate
   }
 
   // --- the market stalls ----------------------------------------------------

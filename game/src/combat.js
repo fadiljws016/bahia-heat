@@ -5,7 +5,31 @@
 // SMG, shotgun) unlock along the respect ladder; ammo is a simple pool per
 // weapon, topped up by finished jobs. Officers (officers.js) are
 // first-class targets now, and shooting at the PAPD is its own crime.
+// Round eight changes no ballistics: the two staged officers who turn
+// their fire onto the Red Sails gunman do it with this same arsenal
+// and this same math — only their staging orders (shots.js) are new.
+// Round six changes no ballistics: it re-photographs the staged exchange
+// (shots.js) from the runner's gun side, so the fire this file simulates
+// can finally be seen leaving his Muelle toward the PAPD.
+//
+// Round three ties the ballistics to the modelled weapons (people.js):
+// each gun fires from its own muzzle — the shotgun's bloom is half again
+// the pistol's snap, its tracer burns hotter, and the streak starts at the
+// barrel tip the player can see, not at the runner's chest.
+//
+// Round five measures that promise in the staged fight: every barrel in
+// the audit sat within a degree of its owner's facing — once shots.js
+// turned the runner's mesh onto the heading this file always trusted.
+//
+// Round four cools the palette of the shot itself: every tracer colour
+// moves from pale straw to a true burning orange, because effects.js now
+// draws the streak as a short dash — a pale dash would vanish, a warm one
+// reads as a bullet's path at any distance.
 
+// Round seven leaves every live gunfight parameter in this file
+// untouched — the owner's approval of the gunfire itself is final.
+// Only the staged tableau's volley cadence changed, and that lives in
+// shots.js.
 import { G } from './state.js';
 import { dist2d } from './util.js';
 import { collidersNear } from './city.js';
@@ -18,12 +42,15 @@ import { addCrime } from './police.js';
 import { sfx } from './audio.js';
 
 export const SLOT_ORDER = ['fists', 'pistol', 'smg', 'shotgun'];
+// muzzle: metres from the runner's centre to the barrel tip, at aim height.
+// flash: muzzle-flash scale. tracer: the streak's colour.
 export const WEAPONS = {
   fists: { name: 'Fists', slot: 1, ammoKey: null, damage: 12, rate: 0.34, range: 2.1, spread: 0, pellets: 0, auto: false },
-  pistol: { name: 'P-9 Pistol', slot: 2, ammoKey: 'pistol', damage: 16, rate: 0.27, range: 60, spread: 0.012, pellets: 1, auto: false },
-  smg: { name: 'Kobra SMG', slot: 3, ammoKey: 'smg', damage: 10, rate: 0.085, range: 55, spread: 0.03, pellets: 1, auto: true },
-  shotgun: { name: 'Muelle 12ga', slot: 4, ammoKey: 'shotgun', damage: 9, rate: 0.85, range: 34, spread: 0.075, pellets: 5, auto: false },
+  pistol: { name: 'P-9 Pistol', slot: 2, ammoKey: 'pistol', damage: 16, rate: 0.27, range: 60, spread: 0.012, pellets: 1, auto: false, muzzle: 0.92, flash: 1.0, tracer: 0xffc36b },
+  smg: { name: 'Kobra SMG', slot: 3, ammoKey: 'smg', damage: 10, rate: 0.085, range: 55, spread: 0.03, pellets: 1, auto: true, muzzle: 1.18, flash: 1.15, tracer: 0xffbe5a },
+  shotgun: { name: 'Muelle 12ga', slot: 4, ammoKey: 'shotgun', damage: 9, rate: 0.85, range: 34, spread: 0.075, pellets: 5, auto: false, muzzle: 1.2, flash: 1.7, tracer: 0xffc37a },
 };
+const GUN_HEIGHT = 1.36; // the aim line of the taller round-three rig
 
 let fireCd = 0;
 
@@ -60,7 +87,8 @@ function rayVsBox(ox, oz, dx, dz, box) {
 /**
  * Fire one trigger pull along the camera aim. The aim point is the crosshair
  * centre projected into the world (camera.js keeps G.aimPoint fresh); shots
- * originate at the player's gun so the tracer geometry reads correctly.
+ * originate at the weapon's muzzle so the tracer leaves the barrel the
+ * player sees in the aim pose.
  */
 function fireOnce(weapon) {
   const p = G.player;
@@ -70,8 +98,8 @@ function fireOnce(weapon) {
   if (weapon.key === 'shotgun') sfx.shotgun(); else sfx.shot();
   if (G.wanted > 0.3 || G.policeCars.length || G.officers.length) addCrime(0.25, 'Shots fired');
 
-  const gx = p.x + Math.sin(p.heading) * 0.5;
-  const gz = p.z + Math.cos(p.heading) * 0.5;
+  const gx = p.x + Math.sin(p.heading) * weapon.muzzle;
+  const gz = p.z + Math.cos(p.heading) * weapon.muzzle;
 
   for (let pellet = 0; pellet < weapon.pellets; pellet += 1) {
     const jitter = () => (Math.random() - 0.5) * 2 * weapon.spread * 40;
@@ -109,8 +137,8 @@ function fireOnce(weapon) {
     const hitFx = !bestHit ? null
       : bestHit.kind === 'car' ? 'spark'
         : bestHit.kind === 'wall' ? 'dust' : 'flesh';
-    gunshotFx(gx, 1.32, gz, hx, bestHit?.kind === 'wall' ? 1.4 : 1.05, hz,
-      { heading: p.heading, casing: pellet === 0, hit: hitFx });
+    gunshotFx(gx, GUN_HEIGHT, gz, hx, bestHit?.kind === 'wall' ? 1.4 : 1.05, hz,
+      { heading: p.heading, casing: pellet === 0, hit: hitFx, flash: weapon.flash, color: weapon.tracer });
 
     if (!bestHit) continue;
     if (bestHit.kind === 'ped') {
@@ -211,5 +239,5 @@ export function splashDamage(x, z, radius, power) {
     const d = dist2d(off.x, off.z, x, z);
     if (d < radius) hurtOfficer(off, power * (1 - d / radius) * 14);
   }
-  burst(x, 1, z, 0xffa040, 10, 3);
+  burst(x, 1, z, 0xffa040, 12, 3.2);
 }

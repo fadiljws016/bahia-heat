@@ -1,13 +1,35 @@
-// player.js — the runner of Puerto Alba. Round two builds him from the
-// same articulated kit as everyone else (people.js): he walks and runs with
-// swinging limbs, raises a drawn weapon into a real aim pose, and throws a
-// punch you can see. On foot he answers to WASD relative to the camera;
-// E steals or enters the nearest car; driving itself lives in vehicles.js.
+// player.js — the runner of Puerto Alba, built from the same articulated
+// kit as everyone else (people.js): he walks and runs with swinging limbs,
+// raises a drawn weapon into a real aim pose, and throws a punch you can
+// see. On foot he answers to WASD relative to the camera; E steals or
+// enters the nearest car; driving itself lives in vehicles.js. Round
+// eight moves only his staged double: in the combat photograph he
+// steps out from behind his cover sedan so the Muelle clears his
+// silhouette — the runner the player drives below walks, aims and
+// fights exactly as before.
+//
+// Round three carries his arsenal the way the screenshots need it seen:
+// the active gun sits in the hip holster while he walks and talks, and
+// comes up into both hands the moment he aims — pistol, Kobra or Muelle,
+// each the modelled weapon from people.js.
+//
+// Round five records this file's facing contract, learned the hard way in
+// the audit: the per-frame update below sets mesh.rotation.y from
+// p.heading every frame, but spawnPlayer freezes the mesh at whatever
+// heading it was born with — so a staged scene (shots.js) must turn the
+// mesh itself, or the runner fires one way and faces another. Round six
+// adds the corollary the captured frame taught: in shot mode the update
+// below never runs, so the staged turn is the only one he gets — and
+// the screenshot's camera must be seated where that turn can be seen,
+// which is why shots.js moved its combat lens to his gun side.
 
+// Round seven honours this file's facing contract, recorded in round
+// five: spawnPlayer freezes the mesh at its spawn heading, so shots.js
+// turns the runner explicitly for the mirrored combat seat, as before.
 import { G } from './state.js';
 import { clamp, collideCircleBox, dist2d } from './util.js';
 import { collidersNear, PLACES } from './city.js';
-import { buildPersonMesh, posePerson } from './people.js';
+import { buildPersonMesh, posePerson, showWeapon } from './people.js';
 import { input } from './input.js';
 import { driveCar } from './vehicles.js';
 import { addCrime } from './police.js';
@@ -154,7 +176,10 @@ export function updatePlayer(dt) {
   }
   const running = input.keys.has('ShiftLeft') || input.keys.has('ShiftRight');
   const aiming = G.aimingT > 0;
-  const speed = aiming ? 2.2 : running ? 7.6 : 4.4;
+  // Aiming is a stalk, not a jog — and the pose below always lets 'aim'
+  // win over the walk/run cycles, so the runner never fires mid-stride:
+  // the planted stance people.js builds is what a raised weapon shows.
+  const speed = aiming ? 2.0 : running ? 7.6 : 4.4;
   p.moving = !!(f || s);
   if (p.moving) {
     p.x += mx * speed * dt;
@@ -166,9 +191,11 @@ export function updatePlayer(dt) {
     p.heading = camYaw + Math.PI;
   }
 
-  // Poses: the gun shows only when a firearm is the active slot.
-  const parts = p.mesh.userData.parts;
-  if (parts?.gun) parts.gun.visible = G.currentWeapon !== 'fists';
+  // The carry: fists (or a punch mid-swing) show nothing; aiming brings
+  // the active weapon up in both hands; everything else rides the hip.
+  if (G.currentWeapon === 'fists' || G.punchT > 0) showWeapon(p.mesh, null, 'none');
+  else if (aiming) showWeapon(p.mesh, G.currentWeapon, 'hand');
+  else showWeapon(p.mesh, G.currentWeapon, 'hip');
   p.mesh.position.set(p.x, 0, p.z);
   p.mesh.rotation.y = p.heading;
   p.mesh.rotation.x = 0;

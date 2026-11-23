@@ -4,7 +4,26 @@
 // the road in a bright pool — under the light, the police always know
 // where you are (G.heliSeesPlayer feeds the sight state in police.js).
 // G.heli carries { active, x, z } for the minimap and the dispatch board.
+// Round three strengthens the dusk beam a step so the pool reads inside
+// the deeper grade. Round five leaves FALCON-1 grounded in the audit
+// frame on purpose: the Palma Showdown staging holds wanted at 2.6,
+// under its threshold, so the foot fight could be judged alone. Round
+// six leaves the air unit exactly as it was — its pass is signage and
+// one camera, both on the ground.
 
+// Round seven keeps FALCON-1 out of the combat frame, as staged
+// (wanted 2.6 in shots.js): the orbit, the cone and the sight feed
+// are untouched.
+//
+// Round eight brings FALCON-1 INTO the chase frame. The live orbit
+// flies at y 30, and from the staged chase lens (62° of vertical
+// field, pitched a breath down the boulevard) that puts the whole
+// airframe above the top edge — the round-seven chase shot showed
+// the spotlight cone and the pool but no helicopter. A staging-only
+// altitude pin (setHeliAltitude, called from shots.js) lowers the
+// staged hover so rotor, body, tail and skids all sit inside the
+// frame; the live game's altitude, orbit and sight feed never see
+// the pin and fly exactly as before.
 import { G } from './state.js';
 import { sfx } from './audio.js';
 
@@ -18,6 +37,7 @@ let strobeMat = null;
 let navRedMat = null;
 let orbitAngle = 0.8;
 let forcedOrbit = null; // screenshot staging pins the orbit phase
+let forcedAltitude = null; // screenshot staging pins the hover height (round eight)
 
 function buildHelicopter() {
   const group = new THREE.Group();
@@ -95,6 +115,16 @@ export function setHeliOrbit(angle) {
   orbitAngle = angle;
 }
 
+/**
+ * Screenshot staging: pin the hover height so the whole airframe —
+ * rotor disc, fuselage, tail boom and skids — fits inside the staged
+ * lens. Staging only: updateHeli reads the pin solely while it is
+ * set, and only shots.js sets it, so live flight is untouched.
+ */
+export function setHeliAltitude(y) {
+  forcedAltitude = y;
+}
+
 /** Orbit the player at 3★+; stand down (hide) below that. */
 export function updateHeli(dt) {
   if (!heli) return;
@@ -110,10 +140,12 @@ export function updateHeli(dt) {
   }
   orbitAngle += dt * 0.32;
   const p = G.player;
-  const r = 34;
+  const r = 33; // one metre tighter than round three: the airframe fills a staged frame better
   const hx = p.x + Math.sin(orbitAngle) * r;
   const hz = p.z + Math.cos(orbitAngle) * r;
-  const hy = 30 + Math.sin(G.elapsed * 0.6) * 2;
+  // Live flight bobs around y 30; a staged frame may pin the hover
+  // lower (setHeliAltitude) so the airframe fits its lens.
+  const hy = forcedAltitude !== null ? forcedAltitude : 30 + Math.sin(G.elapsed * 0.6) * 2;
   heli.position.set(hx, hy, hz);
   heli.rotation.y = Math.atan2(p.x - hx, p.z - hz);
   heli.rotation.z = 0.16;
@@ -131,12 +163,20 @@ export function updateHeli(dt) {
   // The beam hangs from the belly to the suspect; the pool sits on him.
   beam.position.set((hx + p.x) / 2, hy / 2, (hz + p.z) / 2);
   beam.lookAt(p.x, 0, p.z);
-  beam.rotateX(Math.PI / 2);
-  beam.material.opacity = G.isDusk ? 0.13 : 0.05;
+  // Round nine: the cone's direction was backwards. ConeGeometry puts
+  // the apex on +Y and the wide base on −Y; lookAt aims +Z at the
+  // suspect, so rotateX(+π/2) laid the apex on the street and the
+  // base up at the airframe — the beam read wide at the helicopter
+  // and pinched where it landed. rotateX(−π/2) flips it: narrow at
+  // the source, spreading as it falls to the pool, like a real
+  // searchlight. Geometry direction only — colour and opacity are
+  // the recipe as approved.
+  beam.rotateX(-Math.PI / 2);
+  beam.material.opacity = G.isDusk ? 0.16 : 0.05;
   beamLight.position.set(hx, hy, hz);
   beamLight.target.position.set(p.x, 0, p.z);
-  beamLight.intensity = G.isDusk ? 2.4 : 0.7;
+  beamLight.intensity = G.isDusk ? 2.7 : 0.7;
   pool.position.set(p.x, 0.14, p.z);
-  pool.material.opacity = G.isDusk ? 0.34 : 0.1;
+  pool.material.opacity = G.isDusk ? 0.38 : 0.1;
   if (Math.floor(G.elapsed * 2) !== Math.floor((G.elapsed - dt) * 2)) sfx.heliThump();
 }

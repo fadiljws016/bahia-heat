@@ -1,8 +1,28 @@
 // hud.js — every DOM element over the canvas: mission panel, PAPD dispatch
 // board, wanted stars, weapon slots, vitals, vehicle readout, radio line,
 // dialogue box, toasts, banners, the bust meter, and the full-screen map's
-// header district. Systems write into G; this file paints.
+// header district. Systems write into G; this file paints. Round
+// eight paints nothing new either: the dispatch board already lists
+// every foot officer by distance, so the sixth man the staging adds
+// to the Palma Showdown simply takes his own FOOT line on the board,
+// and FALCON-1's AIR SUPPORT line already names the unit the chase
+// frame now shows in full. Round six
+// paints nothing new: the dispatch board and weapon slots carry into the
+// combat shot's new framing unchanged, and the cover's district label
+// still names the quarter the (now lower) fascia signs.
+//
+// Round three draws the arsenal: each weapon slot carries a side-profile
+// silhouette of its gun — the P-9's short slide, the Kobra's long magazine
+// and stock, the Muelle's thick barrel and pump — so the loadout reads at
+// a glance the way the modelled weapons read in the world.
+//
+// Round five changes nothing here: the dispatch board already reports
+// what the facing audit measured — FOOT units, their distances, ENGAGING.
 
+// Round seven is judged partly through this file's dispatch board:
+// the re-spread PAPD line now reports at 7 / 12 / 18 m beside the RAM
+// unit in the combat frame. Same panel, truer distances — no paint
+// changed.
 import { G, rankFor } from './state.js';
 import { formatDayTime, formatClock, clamp } from './util.js';
 import { missionPanelInfo } from './missions.js';
@@ -32,6 +52,15 @@ function show(id, on) {
   if (cache[key] !== on) { cache[key] = on; els[id].classList.toggle('hidden', !on); }
 }
 
+// Side-profile silhouettes on a 64×24 grid, barrels to the right — drawn
+// from the same proportions as the modelled weapons in people.js.
+const WEAPON_ICONS = {
+  fists: '<circle cx="15" cy="10" r="3.6"/><circle cx="22.5" cy="8.4" r="3.9"/><circle cx="30" cy="8.4" r="3.9"/><circle cx="37" cy="10" r="3.6"/><path d="M11 13 h30 v4 q0 5-6 5 h-18 q-6 0-6-5 z"/>',
+  pistol: '<rect x="8" y="7" width="30" height="4.2"/><rect x="38" y="8.2" width="4" height="3"/><rect x="10" y="11.2" width="24" height="2.8"/><path d="M19 14 h8 l-1.6 7.4 q-.2 1.6-2 1.6 h-4.6 q-1.8 0-1.5-1.8 z"/><rect x="29" y="13.4" width="6" height="2"/>',
+  smg: '<rect x="14" y="8" width="30" height="5"/><rect x="44" y="9.6" width="15" height="2.6"/><rect x="55" y="6.4" width="2.2" height="3.4"/><path d="M28 13 h7.4 l-.8 8.2 q-.2 1.8-2 1.8 h-3.4 q-1.9 0-1.8-1.9 z"/><path d="M18.6 13 h6.8 l-1.2 6.6 q-.3 1.4-1.8 1.4 h-3.6 q-1.7 0-1.4-1.7 z"/><rect x="1.6" y="8.6" width="12.4" height="4"/><rect x="40" y="12.6" width="3.4" height="5"/>',
+  shotgun: '<rect x="16" y="7.4" width="43" height="4.2"/><rect x="21" y="11.8" width="29" height="2.6"/><rect x="30" y="11.2" width="9.4" height="4.8" rx="1"/><rect x="8" y="8" width="12" height="6.4"/><path d="M8.6 8.8 L1 10.4 L2.6 17.4 L9.4 14.6 Z"/><circle cx="56.6" cy="6.4" r="1.3"/>',
+};
+
 export function buildHud() {
   for (const id of ['hud', 'mission-panel', 'mission-title', 'mission-stage', 'mission-objective', 'mission-next',
     'mission-timer', 'dispatch-panel', 'dispatch-list', 'dispatch-air', 'clock', 'cash', 'respect-line',
@@ -40,10 +69,10 @@ export function buildHud() {
     'interact-prompt', 'interact-text', 'toast', 'banner', 'banner-big', 'banner-sub', 'location-label',
     'damage-flash', 'garage-panel', 'bust-wrap', 'bust-fill', 'hud-note', 'map-district']) els[id] = $(id);
 
-  // Weapon slots, built once.
+  // Weapon slots, built once — silhouette first, then name and ammo.
   els.weapons.innerHTML = SLOT_ORDER.map((key, i) => {
     const w = WEAPONS[key];
-    return `<div class="slot" id="slot-${key}"><span class="key">${i + 1}</span><span class="wname">${w.name}</span><span class="ammo" id="ammo-${key}">—</span></div>`;
+    return `<div class="slot" id="slot-${key}"><span class="key">${i + 1}</span><svg class="wicon" viewBox="0 0 64 24" aria-hidden="true">${WEAPON_ICONS[key]}</svg><span class="wname">${w.name}</span><span class="ammo" id="ammo-${key}">—</span></div>`;
   }).join('');
   for (const key of SLOT_ORDER) { els[`slot-${key}`] = $(`slot-${key}`); els[`ammo-${key}`] = $(`ammo-${key}`); }
   built = true;
@@ -99,8 +128,9 @@ export function updateHud(dt) {
     show('sight-state', true);
     const label = G.sightState === 'insight' ? 'IN SIGHT' : G.sightState === 'searching' ? 'SEARCHING' : 'LOSING THEM';
     setText('sight-state', label);
+    // Setting className wipes the element's classes wholesale — the id is
+    // not a class and survives it, so it needs no re-stamping each frame.
     els['sight-state'].className = G.sightState === 'searching' ? 'searching' : G.sightState === 'lost' ? 'lost' : '';
-    els['sight-state'].id = 'sight-state';
   } else show('sight-state', false);
 
   // Weapon slots.

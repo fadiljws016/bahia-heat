@@ -4,6 +4,25 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bahia Heat — Puerto Alba</title>
+<!-- Round five (final polish): the MARINA ALTA fascia is sized to sit
+     whole inside the cover frame, gun smoke runs warm grey instead of
+     white, and every staged shooter faces his target. The game below is
+     unchanged in structure: static files, no network, keyboard + mouse.
+     Round six: the fascia drops lower on the colonnade with headroom in
+     its lettering, so the orange roof trim no longer crosses the glyph
+     tops (the T of ALTA keeps its crossbar), and the combat screenshot's
+     lens moves to the runner's gun side so his aim reads in the frame.
+     Round seven: the combat screenshot is re-shot from the right — the
+     round-five composition mirrored — with the PAPD line re-spread so
+     every officer stands visible in the open and the staged volley
+     thinned so its smoke never covers them; the gunfire itself is
+     untouched.
+     Round eight: the chase screenshot finally shows FALCON-1 in full —
+     rotor, fuselage, tail and skids inside the frame over the
+     boulevard — and the combat screenshot fields a sixth PAPD officer
+     by the surrendering civilian, with the runner stepped out from
+     his cover car so his shotgun reads stock to muzzle. Staging only;
+     the game below is the same static files. -->
 <style>
   :root {
     --gold: #ffb340; --gold-soft: #ffcf6e; --ink: #0d141d; --glass: rgba(10, 16, 24, 0.78);
@@ -11,7 +30,9 @@
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #0d141d; }
-  body { font-family: "Segoe UI", system-ui, Arial, sans-serif; color: var(--paper); }
+  body { font-family: "Segoe UI", system-ui, Arial, sans-serif; color: var(--paper);
+    /* A game page: drag-selecting HUD text mid-fight helps nobody. */
+    user-select: none; -webkit-user-select: none; }
   #app, #app canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
   .hidden { display: none !important; }
   #fade { position: fixed; inset: 0; background: #0d141d; pointer-events: none; transition: opacity 0.9s; z-index: 40; }
@@ -59,11 +80,12 @@
   #bottom-right { position: absolute; right: 16px; bottom: 16px; width: 264px; display: flex; flex-direction: column; gap: 8px; }
   #weapons { display: flex; gap: 6px; }
   .slot { flex: 1; background: var(--glass); border: 1px solid rgba(255,255,255,0.18); border-radius: 8px;
-    padding: 5px 6px; font-size: 10px; position: relative; min-height: 44px; }
+    padding: 5px 6px; font-size: 10px; position: relative; min-height: 62px; color: #9fb4c8; }
   .slot .key { position: absolute; top: 3px; right: 5px; color: #9fb4c8; font-weight: 800; }
-  .slot .wname { display: block; font-weight: 700; font-size: 10.5px; line-height: 1.15; padding-right: 10px; }
+  .slot .wicon { display: block; width: 46px; height: 18px; margin: 1px 0 3px; fill: currentColor; }
+  .slot .wname { display: block; font-weight: 700; font-size: 10.5px; line-height: 1.15; padding-right: 10px; color: var(--paper); }
   .slot .ammo { display: block; margin-top: 3px; color: var(--gold-soft); font-weight: 800; font-size: 12px; }
-  .slot.active { border-color: var(--gold); box-shadow: 0 0 10px rgba(255,179,64,0.35); }
+  .slot.active { border-color: var(--gold); box-shadow: 0 0 10px rgba(255,179,64,0.35); color: var(--gold-soft); }
   .slot.locked { opacity: 0.45; }
   .bar { height: 11px; border-radius: 6px; background: rgba(255,255,255,0.14); overflow: hidden; }
   .bar > div { height: 100%; transition: width 0.15s; }

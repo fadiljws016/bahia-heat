@@ -2,21 +2,48 @@
 // Two particle systems (hard sparks and soft smoke/dust), tracer streaks
 // built from stretched glowing boxes so a gunfight reads across the street,
 // muzzle-flash sprites with a shared point light, ejected shell casings that
-// bounce on the asphalt, and the explosion shockwave rings. combat.js, the
+// bounce on the asphalt, and the explosion shockwave rings. Round
+// eight touches nothing in this file's behaviour — the recipe the
+// owner approved (thin warm dashes, small warm stars, sparks and
+// casings) is exactly what the two newly-firing staged officers now
+// speak through gunshotFx; this note is the whole change here. combat.js, the
 // officers and the rival crews all speak through gunshotFx so every shot in
-// Puerto Alba looks the same: flash, streak, impact.
+// Puerto Alba looks the same: flash, streak, impact. Round six keeps the
+// round-four/five recipe — compact warm muzzle stars, thin warm tracer
+// dashes, warm-grey smoke — and verifies it from the combat shot's new
+// angle, where the runner's flash now sits visibly on his muzzle instead
+// of hiding behind him.
+//
+// Round three turns a firefight up: the pools grow by half again, tracers
+// burn longer and thicker, muzzle flashes scale with the weapon and throw
+// real light, every shot leaves a wisp of smoke hanging at the muzzle, and
+// impacts answer harder — ricochet fans off asphalt and bodywork, dust
+// blooms off masonry, casings by the dozen.
+//
+// Round four pulls the light back to the guns themselves, on the owner's
+// word: the big soft flash sprites read as white blobs that hid the fight,
+// and a tracer stretched the whole way read as a beam. Now a muzzle flash
+// is a compact star of warm orange flame that lives for two frames at the
+// barrel tip and nowhere else, and a tracer is a short, thin, warm dash
+// caught mid-flight — the fight reads from the dashes, the sparks, the
+// casings and the smoke, not from the glare.
 
+// Round seven changes NO gunfire parameter in this file: tracer
+// dashes, muzzle stars, sparks, casings and the round-five warm-grey
+// smoke colours stay exactly as the owner approved them. The staged
+// combat scene's thinner air is a staging decision in shots.js (half
+// volley cadence, a whisper of car smoke), not a change here.
 import { G } from './state.js';
 import { sfx } from './audio.js';
 
 // ------------------------------------------------------------- spark pool
-const SPARKS = 1200;
+const SPARKS = 1800;
 let sparkPts = null, sparkPos = null, sparkCol = null;
 const sparkParts = [];
 let sparkCursor = 0;
 
 // ------------------------------------------------------------- smoke pool
-const SMOKES = 520;
+const SMOKES = 900;
 let smokePts = null, smokePos = null, smokeCol = null;
 const smokeParts = [];
 let smokeCursor = 0;
@@ -26,39 +53,63 @@ let flashLight = null;
 const rings = [];
 
 // ------------------------------------------------------------- tracers
-const TRACER_POOL = 44;
+const TRACER_POOL = 110;
 const tracerPool = []; // { mesh, life, maxLife }
 
 // ------------------------------------------------------------- muzzle sprites
-const FLASH_POOL = 10;
-const flashPool = []; // { sprite, life }
+const FLASH_POOL = 26;
+const flashPool = []; // { sprite, life, maxLife }
 
 // ------------------------------------------------------------- shell casings
-const CASING_POOL = 48;
+const CASING_POOL = 84;
 let casingMesh = null;
 const casings = []; // { x,y,z, vx,vy,vz, rot, vr, life }
 let casingObj = null; // a reusable Object3D for composing casing matrices
+
+/**
+ * A soft round dot for the particle points. THREE.Points draws square
+ * points unless a map says otherwise — unmapped, a 1.8 m smoke puff is a
+ * hard-edged white BOX, and a street full of them reads as floating
+ * panels. The radial alpha makes every point a puff instead; the vertex
+ * colours still carry the tint.
+ */
+function makeSoftDotTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.45, 'rgba(255,255,255,0.62)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
 
 function makeFlashTexture() {
   const c = document.createElement('canvas');
   c.width = 64; c.height = 64;
   const g = c.getContext('2d');
-  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 30);
-  grad.addColorStop(0, 'rgba(255,240,200,1)');
-  grad.addColorStop(0.35, 'rgba(255,190,90,0.85)');
-  grad.addColorStop(1, 'rgba(255,140,40,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 64, 64);
-  // A four-point star over the glow reads as a flash at any distance.
-  g.fillStyle = 'rgba(255,230,170,0.9)';
+  // A compact four-point star of real gunfire colours: a small hot core in
+  // deep yellow, arms of orange that die before they reach the edge. No
+  // wide radial glow and nothing near white — the sprite is drawn small at
+  // the muzzle, and what little halo it has stays inside its own frame.
+  g.fillStyle = 'rgba(255,122,26,0.9)';
   g.beginPath();
-  g.moveTo(32, 0); g.lineTo(36, 28); g.lineTo(64, 32); g.lineTo(36, 36);
-  g.lineTo(32, 64); g.lineTo(28, 36); g.lineTo(0, 32); g.lineTo(28, 28);
+  g.moveTo(32, 6); g.lineTo(36.5, 27.5); g.lineTo(58, 32); g.lineTo(36.5, 36.5);
+  g.lineTo(32, 58); g.lineTo(27.5, 36.5); g.lineTo(6, 32); g.lineTo(27.5, 27.5);
   g.closePath(); g.fill();
+  const grad = g.createRadialGradient(32, 32, 1, 32, 32, 13);
+  grad.addColorStop(0, 'rgba(255,214,90,1)');
+  grad.addColorStop(0.55, 'rgba(255,166,48,0.95)');
+  grad.addColorStop(1, 'rgba(255,110,26,0)');
+  g.fillStyle = grad;
+  g.fillRect(19, 19, 26, 26);
   return new THREE.CanvasTexture(c);
 }
 
 export function initEffects(scene) {
+  const dotTex = makeSoftDotTexture();
   // Sparks: small, fast, bright.
   {
     const geo = new THREE.BufferGeometry();
@@ -70,7 +121,7 @@ export function initEffects(scene) {
     geo.setAttribute('position', sparkPos);
     geo.setAttribute('color', sparkCol);
     sparkPts = new THREE.Points(geo, new THREE.PointsMaterial({
-      size: 0.34, vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false,
+      size: 0.36, map: dotTex, vertexColors: true, transparent: true, opacity: 0.97, depthWrite: false,
     }));
     sparkPts.frustumCulled = false;
     scene.add(sparkPts);
@@ -86,43 +137,49 @@ export function initEffects(scene) {
     geo.setAttribute('position', smokePos);
     geo.setAttribute('color', smokeCol);
     smokePts = new THREE.Points(geo, new THREE.PointsMaterial({
-      size: 1.7, vertexColors: true, transparent: true, opacity: 0.34, depthWrite: false,
+      // Opacity trimmed 0.36 → 0.32 in round five: overlapping puffs in a
+      // sustained fight should haze the air, not pile into solid clouds.
+      size: 1.55, map: dotTex, vertexColors: true, transparent: true, opacity: 0.32, depthWrite: false,
     }));
     smokePts.frustumCulled = false;
     scene.add(smokePts);
   }
 
-  flashLight = new THREE.PointLight(0xffc37a, 0, 30);
+  // The flash light hugs the gun now: a short warm flicker that tints the
+  // shooter's hands and the wall beside him, not a wash over the street.
+  flashLight = new THREE.PointLight(0xffb35e, 0, 15);
   flashLight.position.set(0, 3, 0);
   scene.add(flashLight);
 
-  // Tracer streaks: unit boxes stretched between muzzle and target.
-  const tGeo = new THREE.BoxGeometry(0.09, 0.09, 1);
+  // Tracer streaks: thin unit boxes, drawn as short dashes part-way along
+  // the bullet's path (tracer() does the placing) — a volley still leaves
+  // several in the air at once, but each one is a bullet, not a beam.
+  const tGeo = new THREE.BoxGeometry(0.05, 0.05, 1);
   for (let i = 0; i < TRACER_POOL; i += 1) {
     const m = new THREE.Mesh(tGeo, new THREE.MeshBasicMaterial({
-      color: 0xffd98a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false,
+      color: 0xffb347, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false,
     }));
     m.visible = false;
     scene.add(m);
-    tracerPool.push({ mesh: m, life: 0, maxLife: 0.13 });
+    tracerPool.push({ mesh: m, life: 0, maxLife: 0.09 });
   }
 
-  // Muzzle flash sprites.
+  // Muzzle flash sprites: small stars at the barrel tip, gone in two frames.
   const fTex = makeFlashTexture();
   for (let i = 0; i < FLASH_POOL; i += 1) {
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({
       map: fTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false,
     }));
-    sp.scale.set(0.85, 0.85, 1);
+    sp.scale.set(0.4, 0.4, 1);
     sp.visible = false;
     scene.add(sp);
-    flashPool.push({ sprite: sp, life: 0 });
+    flashPool.push({ sprite: sp, life: 0, maxLife: 0.05 });
   }
 
   // Shell casings: one instanced mesh, simulated by hand.
   casingMesh = new THREE.InstancedMesh(
-    new THREE.BoxGeometry(0.035, 0.025, 0.075),
-    new THREE.MeshBasicMaterial({ color: 0xd8a83c }), CASING_POOL);
+    new THREE.BoxGeometry(0.04, 0.028, 0.085),
+    new THREE.MeshBasicMaterial({ color: 0xe0aa40 }), CASING_POOL);
   casingMesh.frustumCulled = false;
   casingObj = new THREE.Object3D();
   for (let i = 0; i < CASING_POOL; i += 1) {
@@ -183,34 +240,50 @@ export function burstSmoke(x, y, z, count = 4, opts = {}) {
   smokeCol.needsUpdate = true;
 }
 
-/** A gunshot tracer: a bright streak that lives for a blink. */
-export function tracer(x1, y1, z1, x2, y2, z2, colorHex = 0xffd98a) {
+/**
+ * A gunshot tracer: not the whole path — a short warm dash caught in
+ * flight, its head about three quarters of the way to the target. From a
+ * volley of these the eye still draws the line of fire, but no single
+ * streak ever spans the street.
+ */
+export function tracer(x1, y1, z1, x2, y2, z2, colorHex = 0xffb347) {
   const slot = tracerPool.find((t) => t.life <= 0) ?? tracerPool[0];
   if (!slot) return;
   const m = slot.mesh;
   const dx = x2 - x1, dy = y2 - y1, dz = z2 - z1;
   const len = Math.max(0.1, Math.hypot(dx, dy, dz));
-  m.position.set((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2);
+  const dash = Math.min(3.4, Math.max(1.1, len * 0.3));
+  const head = 0.78; // where along the path the dash's nose sits
+  const cx = x1 + dx * head - (dx / len) * dash / 2;
+  const cy = y1 + dy * head - (dy / len) * dash / 2;
+  const cz = z1 + dz * head - (dz / len) * dash / 2;
+  m.position.set(cx, cy, cz);
   m.lookAt(x2, y2, z2);
-  m.scale.set(1, 1, len);
+  m.scale.set(1, 1, dash);
   m.material.color.setHex(colorHex);
-  m.material.opacity = 0.95;
+  m.material.opacity = 0.92;
   m.visible = true;
   slot.life = slot.maxLife;
 }
 
-/** Muzzle flash: a star sprite at the gun plus the shared light's flicker. */
-export function muzzle(x, y, z) {
-  if (flashLight) { flashLight.position.set(x, y, z); flashLight.intensity = 3.0; }
+/**
+ * Muzzle flash: a small star sprite pinned to the barrel tip plus the
+ * shared light's brief flicker. `scale` follows the weapon — a shotgun's
+ * star is broader than a pistol's snap, and both stay under half a metre.
+ */
+export function muzzle(x, y, z, scale = 1) {
+  if (flashLight) { flashLight.position.set(x, y, z); flashLight.intensity = 1.15 + scale * 0.5; }
   const slot = flashPool.find((f) => f.life <= 0) ?? flashPool[0];
   if (slot) {
+    const s = (0.3 + Math.random() * 0.09) * scale;
     slot.sprite.position.set(x, y, z);
+    slot.sprite.scale.set(s, s, 1);
     slot.sprite.material.opacity = 0.95;
     slot.sprite.material.rotation = Math.random() * Math.PI;
     slot.sprite.visible = true;
-    slot.life = 0.055;
+    slot.life = slot.maxLife;
   }
-  burst(x, y, z, 0xffc37a, 2, 1.0, { life: 0.1, up: 0.2 });
+  burst(x, y, z, 0xffb35e, 2, 0.9, { life: 0.1, up: 0.2 });
 }
 
 /** Eject one brass casing from a gun, arcing toward the shooter's right. */
@@ -224,35 +297,49 @@ export function casing(x, y, z, heading) {
   c.vy = 1.6 + Math.random() * 0.8;
   c.rot = Math.random() * 6;
   c.vr = (Math.random() - 0.5) * 18;
-  c.life = 1.5;
+  c.life = 1.6;
 }
 
 /**
- * One complete gunshot, drawn: muzzle flash and a casing at the origin, a
- * tracer streak to the target, and the right impact where it lands —
- * 'spark' off metal, 'dust' off walls and ground, 'flesh' on a person.
+ * One complete gunshot, drawn: a scaled muzzle flash and a casing at the
+ * origin, a tracer streak to the target, a breath of smoke that hangs at
+ * the muzzle, and the right impact where it lands — a ricochet fan of
+ * sparks off metal and asphalt ('spark'), a dust bloom off masonry and
+ * ground ('dust'), a flinch of red off a person ('flesh').
  */
 export function gunshotFx(x, y, z, tx, ty, tz, opts = {}) {
-  muzzle(x, y, z);
+  muzzle(x, y, z, opts.flash ?? 1);
   if (opts.casing !== false) casing(x, y, z, opts.heading ?? 0);
-  tracer(x, y, z, tx, ty, tz, opts.color ?? 0xffd98a);
-  if (opts.hit === 'spark') burst(tx, ty, tz, 0xffcf5e, 5, 1.9, { life: 0.4 });
-  else if (opts.hit === 'dust') {
-    burst(tx, ty, tz, 0xcbb79a, 4, 1.2, { life: 0.5, up: 0.5 });
-    burstSmoke(tx, ty, tz, 1, { color: 0xbfae90, life: 0.9, rise: 0.5, power: 0.4 });
+  tracer(x, y, z, tx, ty, tz, opts.color ?? 0xffb347);
+  // Powder smoke drifts out of the muzzle and stays a moment — a sustained
+  // fight hazes its own air. Round five sets the colour: a warm mid-grey
+  // (0x8a7f70), dusk-tinted. The old near-white 0xcfd2cd stacked a whole
+  // volley's worth of wisps into bright steam clouds around the fight,
+  // which the owner flagged twice — gun smoke is grey, never white.
+  burstSmoke(x, y, z, 1, { color: 0x8a7f70, life: 1.1, rise: 0.55, power: 0.3 });
+  if (opts.hit === 'spark') {
+    burst(tx, ty, tz, 0xffcf5e, 9, 2.3, { life: 0.45 });
+    burst(tx, ty, tz, 0xfff0b8, 4, 1.4, { life: 0.3 });
+    // The ricochet: a flat fan skimming away along the surface.
+    burst(tx, 0.12, tz, 0xffb84d, 5, 2.6, { life: 0.5, up: 0.22, baseVy: 0.15, spread: 1.4 });
+  } else if (opts.hit === 'dust') {
+    burst(tx, ty, tz, 0xcbb79a, 7, 1.5, { life: 0.55, up: 0.55 });
+    // Impact dust: the same round-five rule as the muzzle smoke — a
+    // deeper warm grey-brown (0x99876c), dust at dusk, not pale steam.
+    burstSmoke(tx, ty, tz, 2, { color: 0x99876c, life: 1.15, rise: 0.55, power: 0.5 });
   } else if (opts.hit === 'flesh') {
-    burst(tx, ty, tz, 0x9e2f26, 5, 1.5, { life: 0.45 });
+    burst(tx, ty, tz, 0x9e2f26, 6, 1.6, { life: 0.45 });
   }
 }
 
 /** The full explosion: fireball, smoke column, shockwave ring, sound, shake. */
 export function explodeAt(x, z, radius = 7, sourceCar = null) {
-  burst(x, 1, z, 0xff7a2e, 34, 6, { life: 0.8, up: 1.4 });
-  burst(x, 1.4, z, 0xffc37a, 22, 4.4, { life: 0.5, up: 1.2 });
-  burst(x, 2, z, 0x2c2c2c, 14, 2.4, { life: 1.4, up: 1.4, grav: 1.0 });
-  burstSmoke(x, 1.6, z, 10, { color: 0x3a3a3a, life: 2.6, rise: 1.6, power: 1.6 });
-  burstSmoke(x, 1.2, z, 6, { color: 0x6e6e6e, life: 2.0, rise: 1.1, power: 2.2 });
-  if (flashLight) { flashLight.position.set(x, 2.5, z); flashLight.intensity = 7; }
+  burst(x, 1, z, 0xff7a2e, 38, 6.4, { life: 0.8, up: 1.4 });
+  burst(x, 1.4, z, 0xffc37a, 24, 4.6, { life: 0.5, up: 1.2 });
+  burst(x, 2, z, 0x2c2c2c, 16, 2.6, { life: 1.4, up: 1.4, grav: 1.0 });
+  burstSmoke(x, 1.6, z, 12, { color: 0x3a3a3a, life: 2.8, rise: 1.7, power: 1.7 });
+  burstSmoke(x, 1.2, z, 7, { color: 0x6e6e6e, life: 2.1, rise: 1.15, power: 2.3 });
+  if (flashLight) { flashLight.position.set(x, 2.5, z); flashLight.intensity = 6; }
   if (G.scene) {
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.15, 28),
       new THREE.MeshBasicMaterial({ color: 0xffd9a3, transparent: true, opacity: 0.75, side: THREE.DoubleSide }));
@@ -304,18 +391,18 @@ export function updateEffects(dt) {
     }
     smokePos.needsUpdate = true;
   }
-  if (flashLight && flashLight.intensity > 0) flashLight.intensity = Math.max(0, flashLight.intensity - dt * 30);
+  if (flashLight && flashLight.intensity > 0) flashLight.intensity = Math.max(0, flashLight.intensity - dt * 34);
 
   for (const t of tracerPool) {
     if (t.life <= 0) continue;
     t.life -= dt;
-    t.mesh.material.opacity = Math.max(0, t.life / t.maxLife) * 0.95;
+    t.mesh.material.opacity = Math.max(0, t.life / t.maxLife) * 0.92;
     if (t.life <= 0) t.mesh.visible = false;
   }
   for (const f of flashPool) {
     if (f.life <= 0) continue;
     f.life -= dt;
-    f.sprite.material.opacity = Math.max(0, f.life / 0.055) * 0.95;
+    f.sprite.material.opacity = Math.max(0, f.life / f.maxLife) * 0.97;
     if (f.life <= 0) f.sprite.visible = false;
   }
   // Casings: gravity, one bounce, then they lie in the street a moment.

@@ -4,11 +4,29 @@
 // marina and landmarks) is painted once in world coordinates. The round HUD
 // minimap blits the slice around the player and stamps the live blips plus
 // the gold route. The full-screen map (M) draws the whole city from the
-// same layer — district names, glyph icons for the garage, the PAPD station
+// same layer — district names, glyph icons for the garage, the PAPD station.
+// Round eight redraws no cartography: the combat frame's round map
+// still names Viejo Puerto under the re-staged fight, and the chase
+// frame's still reads MARINA ALTA under the boulevard — the staging
+// moved actors and one helicopter, never the map.
+// Round six redraws no cartography: the map's MARINA ALTA label and the
+// colonnade fascia (city.js) still name the same quarter, the fascia
+// just hangs lower with clearer lettering now.
 // and the hospital, a glowing animated route with a distance readout, and
 // the player's pulsing arrow. The route itself is real: a Dijkstra run
 // over the road grid's intersections.
+//
+// Round five leaves the chart as painted: it already names all six
+// districts that round four's signs — resized in round five so the
+// MARINA ALTA fascia fits its cover frame — now name in the world.
+//
+// Round three deepens the chart to match the graded world: a richer sea,
+// stronger district washes, a warmer land base — the map reads like the
+// city at golden hour, not a grey diagram.
 
+// Round seven moves no cartography: the combat frame's round minimap
+// still centres the alley in Viejo Puerto, and the drive frame's
+// full-screen map is the same painting as round six.
 import { G } from './state.js';
 import { ROADS_X, ROADS_Z, BOULEVARD_X, ROAD_WIDTH, DISTRICTS, PLACES } from './city.js';
 import { objectivePoint } from './missions.js';
@@ -22,12 +40,12 @@ let bigCtx = null;
 let bigCanvas = null;
 
 const DISTRICT_WASH = {
-  'El Faro': 'rgba(243,201,130,0.34)',
-  'Playa Brava': 'rgba(247,224,166,0.30)',
-  'Marina Alta': 'rgba(140,220,235,0.30)',
-  'Las Palmas': 'rgba(152,219,152,0.27)',
-  'Centro Alba': 'rgba(255,255,255,0.20)',
-  'Viejo Puerto': 'rgba(255,170,120,0.30)',
+  'El Faro': 'rgba(243,201,130,0.40)',
+  'Playa Brava': 'rgba(247,224,166,0.36)',
+  'Marina Alta': 'rgba(140,220,235,0.36)',
+  'Las Palmas': 'rgba(152,219,152,0.33)',
+  'Centro Alba': 'rgba(255,255,255,0.24)',
+  'Viejo Puerto': 'rgba(255,170,120,0.36)',
 };
 
 function paintStatic() {
@@ -41,13 +59,13 @@ function paintStatic() {
 
   // The bay: a gradient that deepens away from the shore.
   const sea = g.createLinearGradient(0, 0, X(-200), 0);
-  sea.addColorStop(0, '#173f5c');
-  sea.addColorStop(0.75, '#256a8f');
-  sea.addColorStop(1, '#3d8ab0');
+  sea.addColorStop(0, '#123a58');
+  sea.addColorStop(0.75, '#1f6390');
+  sea.addColorStop(1, '#3583ac');
   g.fillStyle = sea; g.fillRect(0, 0, w, h);
   // Land, then the sand edge along Playa Brava.
-  g.fillStyle = '#7d8471'; g.fillRect(X(-252), 0, (292 + 252) * SCALE, h);
-  g.fillStyle = '#e8d5a0'; g.fillRect(X(-252), 0, 27 * SCALE, h);
+  g.fillStyle = '#77805f'; g.fillRect(X(-252), 0, (292 + 252) * SCALE, h);
+  g.fillStyle = '#ecd49c'; g.fillRect(X(-252), 0, 27 * SCALE, h);
   g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(X(-226.5), 0, 1.6 * SCALE, h); // the waterline
   // District washes with soft borders.
   for (const d of DISTRICTS) {
@@ -58,7 +76,7 @@ function paintStatic() {
     g.strokeRect(X(d.minX), Z(d.minZ), (d.maxX - d.minX) * SCALE, (d.maxZ - d.minZ) * SCALE);
   }
   // The plaza's green heart.
-  g.fillStyle = '#679c58';
+  g.fillStyle = '#5f9c4e';
   g.fillRect(X(PLACES.plaza.x - 15), Z(PLACES.plaza.z - 15), 30 * SCALE, 30 * SCALE);
   // Roads: side streets pale, the boulevard a proud golden band.
   g.fillStyle = '#dcd9d0';
@@ -289,6 +307,13 @@ export function drawMinimap() {
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(half, half, 6 + pulse * 9, 0, Math.PI * 2); ctx.stroke();
   drawPlayerArrow(ctx, half, half, p.heading, 1);
+
+  // North sits at the top of the round map (the blit never rotates), and
+  // saying so on the glass keeps the arrow's swing readable at a glance.
+  ctx.fillStyle = 'rgba(255,248,234,0.85)';
+  ctx.font = '700 11px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('N', half, 15);
 }
 
 // ------------------------------------------------------------- the big map

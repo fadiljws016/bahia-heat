@@ -2,7 +2,17 @@
 // hum, two-tone sirens, gunfire, explosions, traffic horns, the ocean, and
 // three radio stations that are nothing but scheduled oscillator arpeggios.
 // No audio files exist. The context is created lazily on the first user
-// gesture (browser policy), and screenshot modes stay silent.
+// gesture (browser policy), and screenshot modes stay silent. Round
+// eight is another staging round — a helicopter repositioned, officers
+// re-armed and re-aimed inside shots.js — and this mix stays exactly
+// as tuned; the staged frames are silent either way. Round three
+// gives the gunshot a low body under its crack, so a volley sounds like a
+// volley and not a row of caps. Round five is a visual pass (signage,
+// smoke, facings) and leaves this mix exactly as tuned. Round six is a
+// visual pass too (fascia headroom, the combat lens) — the mix stands.
+// Round seven keeps every synthesized sound exactly as tuned: the
+// staged combat volley fires at half cadence (shots.js), so this file's
+// gunshot is simply heard half as often inside the tableau.
 
 let ctx = null;
 let master = null;
@@ -85,7 +95,9 @@ function tone({ freq = 440, dur = 0.15, type = 'sine', gain = 0.25, sweepTo = nu
 }
 
 export const sfx = {
-  shot() { noiseBurst({ dur: 0.11, freq: 2600, gain: 0.5 }); tone({ freq: 160, dur: 0.08, type: 'square', gain: 0.12, sweepTo: 60 }); },
+  // The crack sits a touch lower than round three's: round-four fights put
+  // more guns in the air at once, and stacked bursts at the old gain clipped.
+  shot() { noiseBurst({ dur: 0.11, freq: 2400, gain: 0.44 }); noiseBurst({ dur: 0.16, freq: 800, gain: 0.16, type: 'lowpass' }); tone({ freq: 160, dur: 0.08, type: 'square', gain: 0.12, sweepTo: 60 }); },
   shotgun() { noiseBurst({ dur: 0.24, freq: 1100, gain: 0.7 }); tone({ freq: 120, dur: 0.18, type: 'square', gain: 0.2, sweepTo: 45 }); },
   dryFire() { tone({ freq: 1900, dur: 0.03, type: 'square', gain: 0.08 }); },
   click() { tone({ freq: 1500, dur: 0.03, type: 'square', gain: 0.07 }); },

@@ -1,10 +1,28 @@
 // vehicles.js — the cars of Puerto Alba: low-poly box-built models in five
-// flavours, now with grilles, bumpers, mirrors, spoilers and light cones
-// after dark. An arcade driving model (throttle, steering that bites with
-// speed, handbrake slides), building and car-to-car collision, and a damage
-// model that runs dented → smoking → burning → wreck. Brake lights are
-// per-car now, so a queue of traffic reads as traffic.
+// flavours, with grilles, bumpers, mirrors, spoilers and light cones after
+// dark. An arcade driving model (throttle, steering that bites with speed,
+// handbrake slides), building and car-to-car collision, and a damage model
+// that runs dented → smoking → burning → wreck. Brake lights are per-car,
+// so a queue of traffic reads as traffic. Round eight changes no car:
+// the chase frame's runner sedan, its two cruisers and the roadblock
+// are these same staged vehicles — what changed above them is the
+// helicopter, and what changed beside the combat frame's cover sedan
+// is the man who stepped out from behind it. Round six changes no car: the
+// combat frame's burning cover sedan and the PAPD cruiser are the same
+// staged vehicles as round five, seen from the new gun-side lens — the
+// sedan now stands mid-frame, still burning on schedule (shots.js).
+//
+// Round three deepens the paint palette to sit inside the new grade —
+// hotter reds, a truer racing yellow, a cyan that pops at dusk — and
+// sharpens the glass so cabins catch the light.
+//
+// Round five changes no car: the burning cover sedan and the RAM cruiser
+// in the audit frame are these same models — they simply wear the darker,
+// warmer smoke of the round-five effects pass.
 
+// Round seven photographs the same staged vehicles from the mirrored
+// seat: the cruiser anchors the re-spread PAPD ladder, and the cover
+// sedan burns behind the runner on the same feed schedule (shots.js).
 import { G } from './state.js';
 import { clamp, wrapAngle, collideCircleBox, dist2d } from './util.js';
 import { collidersNear } from './city.js';
@@ -12,17 +30,17 @@ import { burst, burstSmoke, explodeAt } from './effects.js';
 import { sfx } from './audio.js';
 
 export const CAR_TYPES = {
-  sedan: { name: 'Alba Sedan', length: 4.4, width: 1.9, height: 0.62, cabinH: 0.55, topSpeed: 38, accel: 15, grip: 3.4, hp: 100, colors: [0xd84f35, 0x2f7fd0, 0xe8e3d5, 0x35b06f, 0xf2b13c, 0x8a5fc0, 0x30363e] },
-  sport: { name: 'Fuego GT', length: 4.2, width: 1.95, height: 0.5, cabinH: 0.42, topSpeed: 54, accel: 22, grip: 4.2, hp: 90, colors: [0xffcf3f, 0xff5347, 0x57d7e8, 0xf2f2f2, 0x23272e] },
+  sedan: { name: 'Alba Sedan', length: 4.4, width: 1.9, height: 0.62, cabinH: 0.55, topSpeed: 38, accel: 15, grip: 3.4, hp: 100, colors: [0xe0482e, 0x2478cc, 0xe8e3d5, 0x2aa864, 0xf5a623, 0x8a4fd0, 0x30363e] },
+  sport: { name: 'Fuego GT', length: 4.2, width: 1.95, height: 0.5, cabinH: 0.42, topSpeed: 54, accel: 22, grip: 4.2, hp: 90, colors: [0xffcf3f, 0xff4438, 0x3ecfe8, 0xf2f2f2, 0x23272e] },
   taxi: { name: 'Taxi Alba', length: 4.4, width: 1.9, height: 0.62, cabinH: 0.58, topSpeed: 36, accel: 14, grip: 3.4, hp: 110, colors: [0xffb340] },
-  truck: { name: 'Mulo Truck', length: 5.8, width: 2.2, height: 0.9, cabinH: 0.8, topSpeed: 30, accel: 10, grip: 2.8, hp: 170, colors: [0xb08954, 0x7a8a99, 0x5f7d5a, 0xc94f38] },
+  truck: { name: 'Mulo Truck', length: 5.8, width: 2.2, height: 0.9, cabinH: 0.8, topSpeed: 30, accel: 10, grip: 2.8, hp: 170, colors: [0xb08954, 0x7a8a99, 0x54804e, 0xd84a30] },
   cruiser: { name: 'PAPD Interceptor', length: 4.6, width: 1.95, height: 0.6, cabinH: 0.55, topSpeed: 48, accel: 19, grip: 4.0, hp: 150, colors: [0xf2f2f2] },
 };
 
 const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.28, 10);
 wheelGeo.rotateZ(Math.PI / 2);
 const wheelMat = new THREE.MeshLambertMaterial({ color: 0x17191d });
-const glassMat = new THREE.MeshPhongMaterial({ color: 0x1d2c3a, shininess: 80, specular: 0x88aacc });
+const glassMat = new THREE.MeshPhongMaterial({ color: 0x1a2e42, shininess: 110, specular: 0xaad4f0 });
 const chromeMat = new THREE.MeshLambertMaterial({ color: 0x9aa2a8 });
 export const HEADLIGHT_MAT = new THREE.MeshBasicMaterial({ color: 0x8a8578 });
 const TAIL_BASE = 0x7a1d16, TAIL_BRAKE = 0xff2a1e;
@@ -201,8 +219,8 @@ export function driveCar(car, input, dt) {
       damageCar(car, (impactSpeed - 6) * 1.6, true);
       sfx.crash(impactSpeed > 16);
       G.cameraShake = Math.min(0.7, G.cameraShake + impactSpeed * 0.012);
-      burst(car.x + fx * 2, 0.8, car.z + fz * 2, 0xffcf5e, 8, 2.4);
-      burstSmoke(car.x + fx * 2, 0.7, car.z + fz * 2, 2, { color: 0xbfae90, life: 0.8, rise: 0.4 });
+      burst(car.x + fx * 2, 0.8, car.z + fz * 2, 0xffcf5e, 9, 2.6);
+      burstSmoke(car.x + fx * 2, 0.7, car.z + fz * 2, 3, { color: 0xbfae90, life: 0.9, rise: 0.45 });
     }
     car.speed *= -0.18;
     nx = car.x; nz = car.z;
@@ -247,7 +265,7 @@ export function collideCars(cars, dt) {
         damageCar(a, relSpeed * 0.7, false);
         damageCar(b, relSpeed * 0.7, false);
         sfx.crash(relSpeed > 14);
-        burst((a.x + b.x) / 2, 0.8, (a.z + b.z) / 2, 0xffe1a6, 7, 2);
+        burst((a.x + b.x) / 2, 0.8, (a.z + b.z) / 2, 0xffe1a6, 8, 2.2);
         if (a.driver === 'player' || b.driver === 'player') G.cameraShake = Math.min(0.6, G.cameraShake + 0.2);
       }
       const swap = (a.speed + b.speed) / 2;
@@ -280,7 +298,7 @@ export function damageCar(car, amount, byPlayerAction = false) {
   const armorMul = 1 - car.armorLevel * 0.15;
   car.hp -= amount * armorMul;
   if (car.hp <= 0 && car.burning <= 0) {
-    car.burning = 1.6; // seconds of fire before it goes up
+    car.burning = 1.5; // seconds of fire before it goes up (1.6 in round three; denser fights resolve a beat quicker)
     if (byPlayerAction && car.driver === 'police') G.policeAggro = true;
   }
 }
@@ -289,8 +307,9 @@ function updateCarDamageFx(car, dt) {
   const ratio = car.hp / car.maxHp;
   if (car.burning > 0) {
     car.burning -= dt;
-    burst(car.x, 1.2, car.z, 0xff7a2e, 3, 1.6);
-    burstSmoke(car.x, 1.6, car.z, 2, { color: 0x2e2e2e, life: 1.7, rise: 1.5, power: 0.8 });
+    burst(car.x, 1.2, car.z, 0xff7a2e, 4, 1.7);
+    burst(car.x, 1.5, car.z, 0xffc37a, 2, 1.2, { life: 0.35, up: 1.3 });
+    burstSmoke(car.x, 1.6, car.z, 2, { color: 0x2e2e2e, life: 1.8, rise: 1.6, power: 0.8 });
     if (car.burning <= 0) {
       car.dead = true;
       car.speed = 0;

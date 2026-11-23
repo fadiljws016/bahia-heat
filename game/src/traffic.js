@@ -1,9 +1,20 @@
-// traffic.js — the ordinary drivers of Puerto Alba, more of them now:
-// twenty-six cars following the grid lane by lane, brake lights flaring in
-// queues, turns at intersections, and — new in round two — panic. Gunfire
-// within earshot and the whole street puts its foot down, horns blaring,
-// which is exactly the chaos a chase should plough through.
+// traffic.js — the ordinary drivers of Puerto Alba: thirty-two cars
+// following the grid lane by lane, brake lights flaring in queues, turns
+// at intersections, and panic. Gunfire within earshot and the whole street
+// puts its foot down, horns blaring, which is exactly the chaos a chase
+// should plough through. Round eight leaves the grid alone too: the
+// chase photograph's boulevard traffic is this same staged flow, and
+// FALCON-1's lower pass over it is a pin in the staging, not a change
+// to how the city drives. Round three widens the panic radius a touch —
+// with the louder gunfights of the new combat pass, more of the street
+// reacts at once. Round six leaves the traffic alone: no staged frame
+// this round turns on a moving car, and the grid drives as it did.
+// hears them and runs. Round five leaves the thirty-two drivers to their
+// lanes — none of its notes (signage, smoke, facings) were about traffic.
 
+// Round seven stages no live traffic inside the combat frame and
+// changes none here: the tableau's moving chaos stays in the chase
+// shot, and the alley's cars are parked dressing from vehicles.js.
 import { G } from './state.js';
 import { ROADS_X, ROADS_Z, BOULEVARD_X, randomRoadPoint } from './city.js';
 import { clamp, wrapAngle, dist2d, makeRng } from './util.js';
@@ -64,7 +75,9 @@ export function updateTraffic(dt) {
     if (!r) continue;
 
     // Panic: shooting nearby, or a cruiser screaming past, and they run.
-    if (threatNear && dPlayer < 34) car.panicT = 2.6;
+    // The radius widens again in round four (40 → 42 m): a crossfire this
+    // size should empty the whole block, not just the corner.
+    if (threatNear && dPlayer < 42) car.panicT = 2.6;
     if (car.panicT > 0) car.panicT -= dt;
     const panicking = car.panicT > 0;
 

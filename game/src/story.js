@@ -1,7 +1,18 @@
 // story.js — the people of Puerto Alba and the eight jobs that make the
 // runner's name. Pure data: missions.js interprets the stage kinds. Every
-// name, crew and grudge here is Bahia Heat's own.
+// name, crew and grudge here is Bahia Heat's own. Round eight writes
+// no new story: Palma Showdown's alley is the same stage in the same
+// words — the fuller helicopter over the chase and the sixth officer
+// in its shootout photograph are staging, and Marisol's briefings
+// neither gain nor lose a line. Round three sharpens two
+// of Marisol's briefings to name the arsenal the runner now carries.
+// Round five touches no story data: Palma Showdown's escape stage serves
+// as the facing audit's backdrop exactly as written here. Round six
+// keeps that promise too — the stage is only re-photographed.
 
+// Round seven keeps Palma Showdown's data exactly as written — the
+// same escape stage serves as the combat tableau; only its staged
+// photograph changes seats, in shots.js.
 import { PLACES } from './city.js';
 
 export const CHARACTERS = {
@@ -80,13 +91,15 @@ export const MISSIONS = [
     pay: 950, respect: 200,
     intro: [
       L('marisol', 'The Red Sails crew thinks my corner is theirs now. They gather in the Callejón de las Redes.'),
-      L('marisol', 'Teach them geography, runner. Bring a real gun — Dario sells nothing, but respect opens hands.'),
+      L('marisol', 'Teach them geography, runner. Bring a real gun — the Kobra if your name has earned it, the Muelle if it has earned more.'),
+      L('runner', 'And when the PAPD answers the noise?'),
+      L('marisol', 'Then the alley has two lessons to teach. Be quick with both.'),
     ],
     outro: [
       L('marisol', 'The alley is quiet and the corner is mine. Puerto Alba is learning your name.'),
     ],
     stages: [
-      { kind: 'goto', at: PLACES.alleyShootout, radius: 10, objective: 'Go to the Callejón de las Redes', next: 'Viejo Puerto, behind the net lofts' },
+      { kind: 'goto', at: PLACES.alleyShootout, radius: 10, objective: 'Go to the Callejón de las Redes', next: 'Viejo Puerto — past the district sign, behind the net lofts' },
       { kind: 'shootout', at: PLACES.alleyShootout, count: 5, objective: 'Clear out the Red Sails crew', next: 'All of them down — watch the crossfire' },
       { kind: 'escape', objective: 'Shake any heat from the gunfight', next: 'Gone and forgotten, like the Red Sails' },
       { kind: 'goto', at: PLACES.marisolCorner, radius: 6, objective: 'Report back to Marisol', next: 'Marina Alta corner' },

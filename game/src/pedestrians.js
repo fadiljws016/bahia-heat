@@ -1,15 +1,35 @@
 // pedestrians.js — the people of Puerto Alba: dockers, tourists, abuelas
 // with shopping bags, couples arguing outside the market stalls, old men
-// asleep on the sea benches. Round two gives them joints (people.js), lives
-// (stroll, chat, sit, browse, flee) and numbers — the ambient target is
-// nearly double round one's, clustered where the city is busiest. The rival
-// crews are smarter too: they dive behind cars, crouch, and trade visible
-// fire in bursts instead of standing in the open.
+// asleep on the sea benches. They have joints (people.js), lives (stroll,
+// chat, sit, browse, flee) and numbers — the ambient target clusters where
+// the city is busiest. Round eight leaves the crowds as they are: the
+// surrendering civilian at the combat frame's left corner is this
+// file's same arms-up pedestrian — what changed is the PAPD officer
+// the staging now posts beside him, not the man himself. The rival crews are smarter too: they dive behind
+// cars, crouch, and trade visible fire in bursts instead of standing in
+// the open. Round six reconfirms this file's quiet contract, on which
+// the staged ally depends: posePed applies ped.heading to the mesh
+// itself, so a staged gunman faces where his heading says — the Red
+// Sails ally was measured dead-on in both audits, never the defect.
+// the open.
+//
+// Round three arms the crews for real — a Red Sails hostile carries the
+// modelled Kobra or P-9 in his hands and fires longer, faster bursts from
+// its muzzle — and lets the crowds wear the new variety: sunglasses,
+// ponytails, patterned shirts.
+//
+// Round four warms a hostile's tracer to the same burning orange as the
+// player's (combat.js): with effects.js drawing short dashes now, the
+// crews' fire has to read as bullet paths too, not pale streaks.
 
+// Round seven leans on this file's posePed contract — it applies the
+// heading to the mesh — exactly as the round-five audit measured:
+// the staged Red Sails gunman in shots.js is posed through it and
+// reads true from the mirrored seat.
 import { G } from './state.js';
 import { ROADS_X, ROADS_Z, BOULEVARD_X, isOnRoad, collidersNear } from './city.js';
 import { clamp, collideCircleBox, dist2d, makeRng } from './util.js';
-import { buildPersonMesh, randomOutfit, posePerson } from './people.js';
+import { buildPersonMesh, randomOutfit, posePerson, showWeapon } from './people.js';
 import { gunshotFx } from './effects.js';
 import { addCrime } from './police.js';
 import { hurtPlayer } from './player.js';
@@ -22,9 +42,14 @@ const AMBIENT_TARGET = 90;
 /** Place a pedestrian with a job: walk | flee | hostile | fare | stand | chat | sit. */
 export function spawnPedAt(x, z, state = 'walk', opts = {}) {
   const outfit = randomOutfit(rng);
-  if (opts.color != null) { outfit.shirt = opts.color; outfit.skirt = true; outfit.hairStyle = 'long'; }
-  if (state === 'hostile') outfit.shirt = 0x8a1f1f;
+  if (opts.color != null) { outfit.shirt = opts.color; outfit.skirt = true; outfit.hairStyle = 'long'; outfit.shirtPattern = null; }
+  if (state === 'hostile') { outfit.shirt = 0x8a1f1f; outfit.shirtPattern = null; }
   const mesh = buildPersonMesh(outfit);
+  // A crew member's gun is in his hands from the first frame: mostly the
+  // Kobra, sometimes the P-9 — either way it is the modelled weapon, and
+  // the record agrees with what the mesh shows.
+  const gunKind = state === 'hostile' ? (rng() < 0.55 ? 'smg' : 'pistol') : null;
+  if (gunKind) showWeapon(mesh, gunKind, 'hand');
   mesh.position.set(x, 0, z);
   G.scene.add(mesh);
   const ped = {
@@ -35,13 +60,21 @@ export function spawnPedAt(x, z, state = 'walk', opts = {}) {
     name: opts.name ?? null, phaseSeed: rng() * 20,
     armsUp: rng() < 0.4, flinchT: 0, bench: null,
     coverCar: null, coverX: 0, coverZ: 0, coverPhase: 'seek', coverT: 0, burstLeft: 0,
+    gunKind,
   };
   mesh.userData.ped = ped;
   G.peds.push(ped);
   return ped;
 }
 
-/** Pose a placed pedestrian once (the staged screenshot scenes use this). */
+/**
+ * Pose a placed pedestrian once (the staged screenshot scenes use this).
+ * It also turns the mesh to ped.heading — posePerson alone never rotates
+ * the group, and round five's facing audit proved the difference matters:
+ * the staged gunman measured dead-on his target through this function,
+ * while the player, posed by hand in shots.js, kept his spawn heading
+ * until the scene turned him itself.
+ */
 export function posePed(ped, pose, phase = 0, opts = {}) {
   posePerson(ped.mesh, pose, phase, opts);
   ped.mesh.position.set(ped.x, 0, ped.z);
@@ -172,24 +205,26 @@ function findCover(ped) {
   return { car: best, x: best.x + ux * 2.2, z: best.z + uz * 2.2 };
 }
 
-/** One visible hostile shot at the player, with the full effects chain. */
+/** One visible hostile shot at the player, from his own gun's muzzle. */
 function hostileShot(ped) {
   const p = G.player;
-  const gx = ped.x + Math.sin(ped.heading) * 0.5, gz = ped.z + Math.cos(ped.heading) * 0.5;
+  const reach = ped.gunKind === 'smg' ? 1.18 : 0.92;
+  const gx = ped.x + Math.sin(ped.heading) * reach, gz = ped.z + Math.cos(ped.heading) * reach;
   G.lastShotAt = G.elapsed;
   sfx.shot();
+  const fx = { heading: ped.heading, flash: ped.gunKind === 'smg' ? 1.15 : 1.0, color: ped.gunKind === 'smg' ? 0xffbe5a : 0xffc36b };
   if (p.inCar) {
     const car = p.inCar;
     const hit = rng() < 0.3;
-    gunshotFx(gx, 1.32, gz, car.x + (rng() - 0.5) * 2, 0.9, car.z + (rng() - 0.5) * 2,
-      { heading: ped.heading, hit: hit ? 'spark' : null });
+    gunshotFx(gx, 1.36, gz, car.x + (rng() - 0.5) * 2, 0.9, car.z + (rng() - 0.5) * 2,
+      { ...fx, hit: hit ? 'spark' : null });
     if (hit) damageCar(car, 3, false);
     return;
   }
   const hit = rng() < 0.34;
   const tx = p.x + (hit ? 0 : (rng() - 0.5) * 3), tz = p.z + (hit ? 0 : (rng() - 0.5) * 3);
-  gunshotFx(gx, 1.32, gz, tx, hit ? 1.05 : 0.7, tz,
-    { heading: ped.heading, hit: hit ? 'flesh' : 'dust' });
+  gunshotFx(gx, 1.36, gz, tx, hit ? 1.1 : 0.7, tz,
+    { ...fx, hit: hit ? 'flesh' : 'dust' });
   if (hit) hurtPlayer(4 + rng() * 5);
 }
 
@@ -215,12 +250,12 @@ function updateHostile(ped, dt, dPlayer) {
   } else if (ped.coverPhase === 'crouch') {
     crouch = 0.85;
     ped.coverT -= dt;
-    if (ped.coverT <= 0) { ped.coverPhase = 'fire'; ped.burstLeft = 3; ped.shootCd = 0; }
+    if (ped.coverT <= 0) { ped.coverPhase = 'fire'; ped.burstLeft = ped.gunKind === 'smg' ? 6 : 4; ped.shootCd = 0; }
   } else if (ped.coverPhase === 'fire') {
     crouch = 0.15;
     ped.shootCd -= dt;
     if (ped.shootCd <= 0 && dPlayer < 34 && G.mode === 'playing') {
-      ped.shootCd = 0.16;
+      ped.shootCd = ped.gunKind === 'smg' ? 0.11 : 0.15;
       ped.burstLeft -= 1;
       hostileShot(ped);
       if (ped.burstLeft <= 0) { ped.coverPhase = ped.coverCar ? 'crouch' : 'open'; ped.coverT = 0.7 + rng() * 1.1; }
@@ -235,7 +270,7 @@ function updateHostile(ped, dt, dPlayer) {
     speed = 2.2; pose = 'aim'; crouch = 0.1;
     ped.shootCd -= dt;
     if (ped.shootCd <= 0 && dPlayer < 30 && G.mode === 'playing') {
-      ped.shootCd = 0.9 + rng() * 1.4;
+      ped.shootCd = ped.gunKind === 'smg' ? 0.55 : 0.9 + rng() * 1.4;
       hostileShot(ped);
     }
   }

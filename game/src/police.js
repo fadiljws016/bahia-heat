@@ -1,12 +1,24 @@
 // police.js — the Puerto Alba Police Department. A wanted level (0–5 stars,
 // kept fractional internally) fed by witnessed crimes; cruisers that hunt
 // with three tactics — RAM, FLANK and INTERCEPT — and call out over the
-// dispatch panel; a helicopter (FALCON-1) with a searchlight at 3★; spike
-// strips and roadblocks at 4★. Round two puts the department on its feet
-// too: cruisers anchor while their officers are deployed (officers.js), the
+// dispatch panel; round eight shows that air unit in full in the
+// chase photograph by pinning its staged hover lower (shots.js and
+// helicopter.js) — the department's live FALCON-1 keeps its service
+// altitude and its hunt, untouched by the photograph. a helicopter (FALCON-1) with a searchlight at 3★; spike
+// strips and roadblocks at 4★. Round six leaves the department's
+// behaviour untouched — its staged cruiser and roadblock dress the
+// combat frame exactly as before, only photographed from a new seat.
+// The department fights on its feet too:
+// cruisers anchor while their officers are deployed (officers.js), the
 // roadblock is a physical thing of barriers and teeth, and dispatch reports
-// FOOT units alongside the cars.
+// FOOT units alongside the cars. Round three shortens the re-tasking cycle
+// at four stars and up — the hunt adapts faster when the heat is highest.
+// Round five leaves the hunt as tuned: its audit frame is a 2.6-star foot
+// fight, and the dispatch distances on the HUD are the ones reported here.
 
+// Round seven borrows this file's cruiser and roadblock meshes to
+// dress the re-spread combat tableau in shots.js; the department's
+// hunt — tactics, sight states, spikes — is untouched.
 import { G } from './state.js';
 import { BOULEVARD_X, ROADS_X, ROADS_Z, randomRoadPoint } from './city.js';
 import { clamp, wrapAngle, dist2d, makeRng } from './util.js';
@@ -101,6 +113,8 @@ export function buildRoadblockMeshes() {
 }
 
 function trySpawnRoadblock() {
+  // A block holds for 28 s (round four, up from 26): long enough that a
+  // driver who U-turns at the sight of one may still meet it coming back.
   if (G.roadblock || G.wanted < 3.8) return;
   if (rng() > 0.011) return;
   // Place it on the player's road, ~55 m ahead of their direction of travel.
@@ -112,12 +126,12 @@ function trySpawnRoadblock() {
     let line = roads[0];
     for (const rx of roads) if (Math.abs(rx - p.x) < Math.abs(line - p.x)) line = rx;
     const ahead = p.z + Math.sign(Math.cos(p.heading) || 1) * 55;
-    rb = { x: line, z: clamp(ahead, -290, 290), axis: 'z', cars: [], timer: 26, gone: false, meshes: null };
+    rb = { x: line, z: clamp(ahead, -290, 290), axis: 'z', cars: [], timer: 28, gone: false, meshes: null };
   } else {
     let line = ROADS_Z[0];
     for (const rz of ROADS_Z) if (Math.abs(rz - p.z) < Math.abs(line - p.z)) line = rz;
     const ahead = p.x + Math.sign(Math.sin(p.heading) || 1) * 55;
-    rb = { x: clamp(ahead, -230, 280), z: line, axis: 'x', cars: [], timer: 26, gone: false, meshes: null };
+    rb = { x: clamp(ahead, -230, 280), z: line, axis: 'x', cars: [], timer: 28, gone: false, meshes: null };
   }
   const offsets = rb.axis === 'z' ? [[-3.6, 0], [3.6, 0]] : [[0, -3.6], [0, 3.6]];
   for (const [ox, oz] of offsets) {
@@ -184,7 +198,7 @@ export function updatePolice(dt) {
     car.tacticTimer -= dt;
     if (car.tacticTimer <= 0) {
       car.tactic = TACTICS[Math.floor(rng() * TACTICS.length)];
-      car.tacticTimer = 4 + rng() * 6;
+      car.tacticTimer = (4 + rng() * 6) * (G.wanted >= 3.8 ? 0.6 : 1);
     }
 
     // Pick the aim point by tactic.

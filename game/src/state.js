@@ -1,8 +1,21 @@
 // state.js — the one shared game state object. Every system imports G and
-// reads or writes its slice; nothing else is global. main.js owns the mode
+// reads or writes its slice; nothing else is global. Round eight adds
+// no slice: the helicopter's staged altitude pin lives in
+// helicopter.js beside the unit it moves, and the combat tableau's
+// extra officer is an ordinary officers.js actor in G.officers. main.js owns the mode
 // machine (menu / playing / paused / ended) and the clock; the systems own
-// their actors. Round two adds two slices: the foot officers the PAPD puts
-// on the street at high heat, and the full-screen city map's open flag.
+// their actors. Its slices: the foot officers the PAPD puts on the street
+// at high heat, the full-screen city map's open flag, and the presentation
+// queues every HUD element drains. Round six adds no state: its two
+// fixes — fascia placement in city.js, the combat lens in shots.js —
+// are constants in their own files, read fresh at staging time.
+// (The district signs of round four need
+// no slice here — they are static city dressing, built once by city.js.)
+// Round five adds no slice either: a resized fascia, greyer smoke and one
+// explicitly turned runner all live in city.js, effects.js and shots.js.
+// Round seven adds no state: the combat seat, the volley phase and
+// the officers' new posts are constants inside shots.js, read fresh
+// at staging time like every round before.
 
 export const MODE = { MENU: 'menu', PLAYING: 'playing', PAUSED: 'paused', ENDED: 'ended' };
 

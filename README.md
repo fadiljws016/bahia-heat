@@ -14,21 +14,55 @@ Runner to Kingpin of Puerto Alba; and stay out of FALCON-1's searchlight.
 
 Entered in the make.fun bounty **[Make GTA 6 (gta6-01)](https://make.fun/bounty/gta6-01)**.
 
+The screenshots tell the current build honestly: FALCON-1 hangs in full
+over the boulevard chase — rotor, fuselage, tail and skids, not just its
+spotlight cone — and the Palma Showdown gunfight puts six PAPD-side
+enemies in the open against the runner and his Red Sails gunman, the
+runner stepped out from his cover car with the Muelle laid across the
+frame.
+
 ## What's in the city
 
 - **A full, dense open world**: six districts (El Faro, Playa Brava, Marina
   Alta, Las Palmas, Centro Alba, Viejo Puerto) built from hundreds of
   small-lot buildings with painted facades — lit windows, shutters, AC
-  boxes, balconies, awnings and named shop signs — plus the Mercado del
-  Puerto market stalls, a colonnade, rooftop water towers, billboards,
+  boxes, balconies, awnings and named shop signs — plus a lettered
+  MARINA ALTA fascia over the market colonnade — hung low on the
+  colonnade face with headroom in its lettering, so the roof trim above
+  it never crosses the name — and a gateway sign naming
+  each district at the way into it, the Mercado del
+  Puerto market stalls, rooftop water towers, billboards,
   festival banners, wall posters, pennant strings over the old-port streets,
   and string lights over the market after dark. Landmarks: the El Faro
   lighthouse, a Ferris wheel turning over Playa Brava, marina piers with
   bobbing boats and dock cranes, the Plaza del Reloj fountain.
-- **People with joints**: articulated low-poly citizens — varied skin tones,
-  outfits, hair and hats — who stroll, chat in pairs, browse the stalls, sit
-  on the sea benches, and run screaming when the shooting starts. Police
-  officers are distinct: navy uniforms, caps, drawn pistols.
+- **Ground that is painted, not flat**: every street and square wears a
+  canvas-generated surface — asphalt with aggregate speckle, patched cracks
+  and oil stains; plaza and promenade paving slabs with grout and weather
+  stains; rippled beach sand — plus a clutter layer of fallen flyers and
+  leaves, painted kerbs, tactile paving at the crossings, drain grates, and
+  puddles that mirror the sky at dusk. No large bare plane anywhere.
+- **People with joints and wardrobes**: articulated low-poly citizens —
+  varied skin tones, outfits (some in striped, floral or checked shirts),
+  hair from buns to ponytails, hats and sunglasses — who stroll, chat in
+  facing pairs, browse the stalls, sit on the sea benches, and run
+  screaming when the shooting starts. Police officers are distinct: navy
+  uniforms, badged caps, drawn pistols.
+- **Weapons you can read**: each firearm is a modelled low-poly gun with
+  its own silhouette — the P-9 pistol (slide, sights, wooden grip), the
+  Kobra SMG (long magazine, stock, foregrip), the Muelle 12ga (thick pump
+  barrel, tan pump and stock) — carried in a hip holster between fights and
+  raised two-handed to aim. The HUD weapon slots draw the same silhouettes.
+- **Gunfights you can see**: sustained multi-shooter crossfire — officers
+  and rival crews fire longer bursts from behind cover while the runner
+  answers, planted in a real shooting stance — with short warm tracer
+  dashes in the air at once, compact muzzle stars pinned to the barrel
+  tips (never a white glare hiding the fight), ricochet fans off asphalt
+  and bodywork, dust blooms off walls, ejecting brass, warm-grey powder
+  smoke hanging in the air (grey at dusk, never white steam), and cars
+  that smoke, catch fire and go up mid-fight. In the staged cover fight
+  every shooter's facing was audited in the browser — body, head and
+  barrel each measured on the line to his target.
 - **Driving**: five vehicle types with an arcade model — carjacking, brake
   lights, headlight cones at dusk, damage that smokes, burns and explodes,
   spike strips, garage repairs, resprays, engine tunes and armor plating.
@@ -37,9 +71,6 @@ Entered in the make.fun bounty **[Make GTA 6 (gta6-01)](https://make.fun/bounty/
   three stars officers get out and fight from behind cover, and FALCON-1
   joins with a spotlight that keeps you in sight; at four stars they set
   physical roadblocks with barriers and spike strips.
-- **Combat you can see**: fists, pistol, SMG and shotgun with tracer
-  streaks, muzzle flashes, ejecting casings, impact sparks and dust, and
-  enemies who take cover behind cars between bursts.
 - **Eight story jobs**: thefts, timed deliveries, a smuggler's run, a
   shootout, a checkpoint street race, taxi fares, a car chase takedown, and
   a five-star finale — plus endless taxi fares after the story ends.
@@ -47,11 +78,13 @@ Entered in the make.fun bounty **[Make GTA 6 (gta6-01)](https://make.fun/bounty/
   Alba — pastel districts with names, landmark glyphs, and a glowing gold
   route with a live distance readout to your objective — and a matching
   round minimap in the corner with the same cartography and route.
-- **A dense HUD**: mission panel with staged objectives and timers,
-  dispatch board including FOOT units, wanted stars with IN SIGHT /
-  SEARCHING state, weapon slots, vitals, a bust meter, vehicle condition,
-  and a synthesized radio with three stations. All sound is synthesized
-  WebAudio — there are no audio files.
+- **A graded golden-hour look**: filmic tone mapping, a sky that runs
+  azure into gold into rose, warm sun against cool shadow fill, and a dense
+  HUD — mission panel with staged objectives and timers, dispatch board
+  including FOOT units, wanted stars with IN SIGHT / SEARCHING state,
+  weapon slots with drawn silhouettes, vitals, a bust meter, vehicle
+  condition, and a synthesized radio with three stations. All sound is
+  synthesized WebAudio — there are no audio files.
 
 ## Play it
 
@@ -76,8 +109,9 @@ server pointed at `game/` works just as well.)
 | N | Mute |
 | Esc / P | Pause |
 
-Progress (cash, respect, unlocks, story position, garage upgrades)
-autosaves to the browser's local storage after every job and purchase.
+Progress (cash, respect, unlocks, story position, garage upgrades, and the
+weapon in hand) autosaves to the browser's local storage after every job
+and purchase.
 
 ## Layout
 
@@ -90,4 +124,8 @@ autosaves to the browser's local storage after every job and purchase.
   `vendor/three.min.js` — the three.js library, vendored as a minified
   build; everything else is hand-written.
 - `screenshots/` — four real renders of the game, staged deterministically
-  through `?shot=cover|drive|chase|combat` (see `shots.json`).
+  through `?shot=cover|drive|chase|combat` (see `shots.json`). The combat
+  render is shot from the right in the round-five composition: the runner
+  foreground-left, his gunman beside him, and the PAPD line re-spread
+  across the cruiser's length so every officer stands visible in the
+  open, under a staged volley thinned so its smoke never covers them.

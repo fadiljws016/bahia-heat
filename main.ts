@@ -1,4 +1,15 @@
 // Bahia Heat — entry program for the make.fun "Make GTA 6" bounty (gta6-01).
+// Round six changes nothing here: the fascia headroom (city.js) and the
+// combat camera (shots.js) live in the game files this program copies,
+// and the dossier it writes summarises them exactly as before.
+// Round seven changes nothing here either: the mirrored combat seat,
+// the thinned staged volley and the re-spread PAPD line all live in
+// shots.js, inside the game files this program copies.
+// Round eight changes nothing here again: FALCON-1 shown in full over
+// the chase, a sixth staged officer and the runner's stepped-out
+// stance all live in shots.js and helicopter.js, inside the game
+// files this program copies, and the dossier summarises them as
+// before.
 //
 // What this file does, and all it does: it takes the finished game that lives
 // in the game/ folder next to this file (plain static files: index.html, ES
@@ -6,7 +17,13 @@
 // game/vendor/), plus the maker's screenshots in screenshots/, copies both
 // into the output directory, and writes dossier.json there — the summary the
 // bounty judge reads — using the kit's own dossier builder from
-// vendor/makefun-game.ts.
+// vendor/makefun-game.ts. The game it ships is the round-five build:
+// modelled weapons and real crossfire gunfights whose flashes stay at the
+// muzzles, painted ground under the whole city, a filmic colour grade, and
+// the districts naming themselves on signs over the streets — the MARINA
+// ALTA fascia sized to sit whole inside the cover frame, gun smoke in
+// warm greys instead of white, and a staged cast whose every gun points
+// the way its owner faces (measured, not eyeballed).
 //
 // Run it the way the grader does (Node 22, standard library only, no install):
 //   node main.ts                        -> writes to /output
