@@ -1,6 +1,4 @@
-// Round fourteen note: the PAPD's pressure curve, its named dispatch
-// voice and its roadblock kit (buildRoadblockMeshes, which the chase
-// tableau borrows) are the approved behaviour, re-verified in place.
+// Round seventeen: buildRoadblockMeshes and the dispatch read stand; cruisers take their ids from the rebuilt fleet so the panel prints UNIT numbers, never undefined.
 // police.js — the Puerto Alba Police Department. A wanted level (0–5 stars,
 // kept fractional internally) fed by witnessed crimes; cruisers that hunt
 // with three tactics — RAM, FLANK and INTERCEPT — and call out over the

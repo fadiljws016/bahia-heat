@@ -1,7 +1,4 @@
-// Round fourteen note: the polished map — six district washes, the POI
-// glyphs drawn from the real PLACES, the legend, the route line and its
-// distance pill — was re-checked against the approved map frame; the
-// cartography below is byte-for-byte the approved behaviour.
+// Round seventeen: re-verified against the rebuilt city's surveyed PLACES — the marina gate sits at (-212, 290), so the Hot Delivery route from the drive staging reads its 686 m again.
 // minimap.js — Puerto Alba's cartography, one painted language at two
 // sizes. The static layer (gradient sea, sand edge, pastel district washes
 // with borders, a road hierarchy with the palm boulevard drawn proud, the

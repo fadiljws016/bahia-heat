@@ -1,6 +1,4 @@
-// Round fourteen note: the save format keeps every field it had —
-// a Continue from any earlier round still loads, and the mission
-// engine's writeSave calls land exactly where they always did.
+// Round seventeen: the save shape rides on the same G fields the rebuilt engine writes (cash, respect, missionIndex, completedJobs, garageLevels).
 // save.js — progress persistence in localStorage: cash, respect, story
 // position, unlocked weapons and their ammo pools, garage upgrade levels,
 // and — new in round three — the weapon the runner had in hand, so a

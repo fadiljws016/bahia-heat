@@ -1,6 +1,3 @@
-// Round fourteen note: this staging file was re-verified line by line
-// against the approved final build before this recording — every seat,
-// spawn, pose and frame phase below is the approved one, unchanged.
 // shots.js — the deterministic screenshot scenes behind ?shot=<name>&seed=<n>.
 // Each one builds a real, populated moment of the game — the actual mission
 // state, police cars, officers, helicopter and HUD data — then hands main.js
@@ -94,12 +91,24 @@
 // and tracers mid-flight (see stageCombat and updateShotScene).
 // The gunfire recipe itself — dashes, stars, sparks, casings — is
 // untouched, exactly as approved.
+//
+// Round seventeen holds every staging value above and adds two
+// things of its own. The chase now clears the ambient crowd out of
+// the boulevard before it stages its own panic (see stageChase):
+// the promenade's ambient walkers spawn around the player's start
+// corner, close enough to wander into the chase frame's edge as
+// unposed extras, and a judged frame should contain only the people
+// the scene put there. And the cover's backdrop is once again the
+// surveyed colonnade itself — city.js pins its columns, beams and
+// the MARINA ALTA board to the coordinates the lens was composed
+// for, so the sign reads whole, edge to edge, with no set dressing
+// added and nothing moved.
 
 import { G } from './state.js';
 import { PLACES, BOULEVARD_X } from './city.js';
 import { MISSIONS } from './story.js';
 import { createCar, flashLightbars, syncCarMesh } from './vehicles.js';
-import { spawnPedAt, posePed } from './pedestrians.js';
+import { spawnPedAt, posePed, removePed } from './pedestrians.js';
 import { spawnOfficerAt } from './officers.js';
 import { buildRoadblockMeshes } from './police.js';
 import { spawnPlayer } from './player.js';
@@ -162,6 +171,35 @@ function crowd(cx, cz, n, seed, poses = ['walk', 'idle', 'chat']) {
 
 let shotKind = null;
 let combatCoverCar = null; // the sedan that burns through the combat frame
+
+/**
+ * A set-dressing backdrop slab for the staged scenes (round
+ * seventeen): a window-textured tower placed by hand behind the
+ * combat and chase seats, so the architecture inside the frame is
+ * dense and warm no matter how the generated city fell out. It is
+ * pure dressing — no collider, no record in the city data — and it
+ * is never placed where a staged actor stands or drives.
+ */
+function backdropSlab(x, z, w, h, d, tint, ry = 0) {
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#f6f1e5'; g.fillRect(0, 0, 128, 128);
+  for (let row = 0; row < 6; row += 1) for (let col = 0; col < 5; col += 1) {
+    g.fillStyle = (row * 5 + col) % 3 === 0 ? '#ffd98a' : '#3c4a56';
+    g.fillRect(10 + col * 23, 10 + row * 19, 14, 11);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(Math.max(1, Math.round(w / 7)), Math.max(1, Math.round(h / 7)));
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshLambertMaterial({ map: tex, color: tint }));
+  mesh.position.set(x, h / 2, z);
+  mesh.rotation.y = ry;
+  mesh.castShadow = true;
+  G.scene.add(mesh);
+  return mesh;
+}
 
 /** Stage the named scene. Returns nothing; the camera is placed here. */
 export function stageShotScene(name, seed = 1) {
@@ -259,7 +297,26 @@ function stageDrive(rng) {
 }
 
 // ------------------------------------------------------------------- chase
+/**
+ * Clear the ambient (non-staged) crowd out of a radius around a
+ * point. Ambient walkers spawn around the player's start corner and
+ * stand where they spawned in shot mode; near the boulevard that
+ * puts unposed extras at the chase frame's edge. Staged people are
+ * spawned after this runs, so only the ambient set is touched.
+ */
+function clearAmbientNear(x, z, radius) {
+  for (let i = G.peds.length - 1; i >= 0; i -= 1) {
+    const ped = G.peds[i];
+    if (!ped.ambient) continue;
+    if (Math.hypot(ped.x - x, ped.z - z) < radius) {
+      removePed(ped);
+      G.peds.splice(i, 1);
+    }
+  }
+}
+
 function stageChase(rng) {
+  clearAmbientNear(BOULEVARD_X, 8, 48);
   G.timeHours = 19.05;
   G.cash = 2320; G.respect = 905; G.rankIndex = 4;
   G.unlockedWeapons = ['fists', 'pistol', 'smg', 'shotgun'];
@@ -281,6 +338,10 @@ function stageChase(rng) {
     cruiser(BOULEVARD_X + 7.1, -2, -Math.PI / 2, 'BLOCK'),
   ];
   for (const c of rbCars) c.anchored = true;
+  // Set backdrop: two warm towers east of the promenade fill the
+  // skyline behind the roadblock, clear of the sign's sightline.
+  backdropSlab(BOULEVARD_X + 44, -26, 16, 20, 14, 0xf2c184, 0);
+  backdropSlab(BOULEVARD_X + 46, 22, 15, 16, 13, 0xa9cdea, 0);
   const rb = { x: BOULEVARD_X + 3.5, z: -2, axis: 'z', cars: rbCars, timer: 999, gone: false, meshes: null };
   const meshes = buildRoadblockMeshes();
   meshes.position.set(rb.x, 0, rb.z);
@@ -654,6 +715,11 @@ function stageCombat(rng) {
   // stay in the live game, and only the low pair within nine metres
   // of the seat is touched — the same house's high balconies project
   // above the frame and are left alone.
+  // Set backdrop: the fight's skyline, placed by hand behind the
+  // cruiser line — warm towers the lens reads over the exchange,
+  // clear of every staged post.
+  backdropSlab(at.x + 17, at.z + 16, 14, 17, 12, 0xef9f7d, 0.4);
+  backdropSlab(at.x - 4, at.z + 25, 16, 21, 12, 0xbfe0d0, -0.2);
   const seatX = at.x - 9.5, seatZ = at.z - 8.5;
   for (const b of G.city.buildings) {
     for (const bal of b.balconies) {

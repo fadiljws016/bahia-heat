@@ -1,3 +1,4 @@
+// Round seventeen adds no slice either: the staged altitude and orbit pins live in helicopter.js, the ambient clear is a shots.js local, and the rebuilt city keeps its data on the same G.city record.
 // state.js — the one shared game state object. Every system imports G and
 // reads or writes its slice; nothing else is global. Round eight adds
 // no slice: the helicopter's staged altitude pin lives in
@@ -16,10 +17,6 @@
 // Round seven adds no state: the combat seat, the volley phase and
 // the officers' new posts are constants inside shots.js, read fresh
 // at staging time like every round before.
-
-// Round fourteen adds no slice either: the re-authored systems read
-// and write exactly the fields below — the mission record's stageIndex
-// and targetCar, the dialogue queue, the race state, the queues.
 
 export const MODE = { MENU: 'menu', PLAYING: 'playing', PAUSED: 'paused', ENDED: 'ended' };
 

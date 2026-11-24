@@ -1,6 +1,4 @@
-// Round fourteen note: the HUD's layout and language are final — the
-// mission panel still reads missionPanelInfo, the dispatch board still
-// reads dispatchInfo, and the dialogue box still speaks CHARACTERS.
+// Round seventeen: the panel reads missionPanelInfo's { title, stage, objective, next, timer } from the rebuilt engine in the same shape as before.
 // hud.js — every DOM element over the canvas: mission panel, PAPD dispatch
 // board, wanted stars, weapon slots, vitals, vehicle readout, radio line,
 // dialogue box, toasts, banners, the bust meter, and the full-screen map's

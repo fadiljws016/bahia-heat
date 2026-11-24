@@ -1,6 +1,4 @@
-// Round fourteen note: the runner's collision contract stands — he
-// stops at car hulls (keepOutOfCars against the oriented-box test in
-// util.js) instead of ghosting through them, on foot and at the wheel.
+// Round seventeen: keepOutOfCars and the foot/car collision contract stand as built; the runner's figure and poses now come from the rebuilt people.js rig.
 // player.js — the runner of Puerto Alba, built from the same articulated
 // kit as everyone else (people.js): he walks and runs with swinging limbs,
 // raises a drawn weapon into a real aim pose, and throws a punch you can

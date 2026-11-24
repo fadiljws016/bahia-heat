@@ -1,6 +1,4 @@
-// Round fourteen note: the toolbox is unchanged — the seeded RNG, the
-// heading convention (atan2(dx, dz)) and the circle-vs-OBB test the
-// whole city's collision honesty rests on were re-verified, not revised.
+// Round seventeen: the collision helpers (collideCircleBox / collideCircleOBB) keep their corrected-position contract — the rebuilt vehicles and city lean on it unchanged.
 // util.js — the shared toolbox: a seeded random generator (so the city, the
 // crowds and the screenshot scenes come out identical on every load), the
 // angle and distance math every system leans on, and the one collision

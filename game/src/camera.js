@@ -1,6 +1,4 @@
-// Round fourteen note: stageCamera still takes the staged seats
-// exactly as shots.js hands them over — the cover, chase and combat
-// lenses were re-measured in the captured frames, not re-aimed here.
+// Round seventeen: stageCamera keeps its seat-and-target contract — the four staged lenses are surveyed constants in shots.js.
 // camera.js — the third-person camera: a mouse-orbit follow on foot and a
 // smoothed chase camera in a car. Screenshot modes place the camera
 // directly through stageCamera(). Round eight moves one staged seat

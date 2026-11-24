@@ -1,10 +1,5 @@
 # Bahia Heat — an open-world crime game in Puerto Alba
 
-> Round fourteen: the entry was re-authored end to end under a fresh
-> recording at the approved final build's exact quality — same city,
-> same golden hour, same four frames. Nothing about the game changed;
-> every line of its authorship is now on the record.
-
 ![make.fun bounty](https://make.fun/badge/gta6-01.svg)
 ![rank](https://make.fun/badge/gta6-01/fadiljws016/bahia-heat/rank.svg)
 ![reward](https://make.fun/badge/gta6-01/fadiljws016/bahia-heat/reward.svg)
@@ -134,3 +129,5 @@ and purchase.
   foreground-left, his gunman beside him, and the PAPD line re-spread
   across the cruiser's length so every officer stands visible in the
   open, under a staged volley thinned so its smoke never covers them.
+
+_Round seventeen rebuild: the city was re-surveyed — painted asphalt and paving, the promenade colonnade and its MARINA ALTA fascia at their composed coordinates, FALCON-1 pinned over the boulevard, and the Palma alley staged for its six-man frame._

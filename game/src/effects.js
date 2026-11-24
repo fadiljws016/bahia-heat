@@ -1,7 +1,4 @@
-// Round fourteen note: the gunfire language is final and untouched —
-// thin warm tracer dashes, small orange muzzle-tip stars, sparks,
-// casings, and warm-grey smoke (0x8a7f70 muzzle, 0x99876c dust, opacity
-// near 0.32). This round changes no effect, only records that fact.
+// Round seventeen: the approved gunfire recipe stands untouched — thin warm tracer dashes, small orange muzzle-tip stars, sparks, casings, warm-grey smoke (0x8a7f70 / 0x99876c, ~0.32). This note is the round's only change here.
 // effects.js — visual feedback, all pooled, the hot loop allocates nothing.
 // Two particle systems (hard sparks and soft smoke/dust), tracer streaks
 // built from stretched glowing boxes so a gunfight reads across the street,

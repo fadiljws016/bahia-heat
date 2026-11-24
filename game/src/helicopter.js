@@ -1,7 +1,4 @@
-// Round fourteen note: FALCON-1 keeps its approved shape — full rotor,
-// body, tail and skids, the spotlight cone narrow at the airframe and
-// widening down to its pool (the beam's -PI/2 pitch), and the staging
-// altitude pin the chase frame sets at 22. Nothing below was restyled.
+// Round seventeen: FALCON-1 keeps its staged pins — setHeliAltitude and setHeliOrbit are both read by the chase staging, the beam narrow at the airframe and widening to its pool (rotateX -PI/2).
 // helicopter.js — FALCON-1, the PAPD air unit. At three stars and up it
 // joins the hunt: a low-poly helicopter that orbits the suspect with
 // blinking nav lights, and at dusk its searchlight cone pins the player to

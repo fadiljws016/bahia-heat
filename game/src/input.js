@@ -1,6 +1,4 @@
-// Round fourteen note: the polling contract is untouched — held keys,
-// the edge-triggered pressed set, mouse orbit deltas and the wheel,
-// exactly as camera, combat and the menus already consume them.
+// Round seventeen: the pressed/held sets main.js drains each frame stand unchanged.
 // input.js — keyboard and mouse state. Systems poll `keys` for held buttons
 // and the edge-triggered `pressed` set for one-shot actions (interact,
 // weapon slots, map, pause). Mouse orbit deltas accumulate here for

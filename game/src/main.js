@@ -1,3 +1,4 @@
+// Round seventeen rides this loop unchanged: 45 shot frames, the staged volley phased to the shutter, no system updates in shot mode — the rebuild lives in the systems it wires.
 // main.js — Bahia Heat's boot and heartbeat. Builds the city, wires every
 // system, runs the frame loop, and owns the mode machine: title menu, play,
 // pause, the full-screen map, and the wasted/busted endings. With
@@ -20,9 +21,6 @@
 // system updates in shot mode, so a staged actor keeps exactly the facing
 // shots.js gave him, which is precisely what the audit needed to prove.
 
-// Round fourteen runs through this file's loop exactly as before —
-// the same boot order, the same 45-frame shot loop, the same mode
-// machine — with the re-authored systems wired into the same sockets.
 // Round seven runs through this file's shot loop exactly as before —
 // 45 frames, effects and the staged volley alive, no system updates —
 // and the loop's fixed frame count is what shots.js phases its

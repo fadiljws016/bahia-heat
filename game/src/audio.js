@@ -1,6 +1,4 @@
-// Round fourteen note: the mix is unchanged — synthesized engine,
-// sirens, gunfire and three radio stations, silent in the staged
-// frames exactly as before. This note is the round's only edit here.
+// Round seventeen: stations, engine and siren beds stand; nothing in the rebuilt city changes a sound.
 // audio.js — every sound in Bahia Heat is synthesized with WebAudio: engine
 // hum, two-tone sirens, gunfire, explosions, traffic horns, the ocean, and
 // three radio stations that are nothing but scheduled oscillator arpeggios.

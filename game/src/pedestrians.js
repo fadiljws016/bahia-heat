@@ -1,6 +1,4 @@
-// Round fourteen note: the crowd system is untouched — the same
-// walkers, idlers, sitters, chat pairs, fares and red-shirted hostiles
-// the staged frames and the missions both draw from spawnPedAt.
+// Round seventeen: posePed keeps its measured contract — it applies the heading to the mesh — and removePed now also serves the chase staging's ambient clear.
 // pedestrians.js — the people of Puerto Alba: dockers, tourists, abuelas
 // with shopping bags, couples arguing outside the market stalls, old men
 // asleep on the sea benches. They have joints (people.js), lives (stroll,

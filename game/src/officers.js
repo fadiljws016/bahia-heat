@@ -1,6 +1,4 @@
-// Round fourteen note: the foot officers keep their approved posts,
-// volleys and aim — the combat tableau stages six of them through
-// spawnOfficerAt, and nothing in their behaviour was re-tuned.
+// Round seventeen: staged officers keep their posts and phases from the survey — spawnOfficerAt honours { phase, roadblock, homeCar } as the shots.js staging passes them.
 // officers.js — PAPD on foot: the missing half of the wanted system. At
 // three stars and above, when the player is out of their car, cruisers stop
 // and officers get out — navy uniforms, caps, drawn pistols — and fight the

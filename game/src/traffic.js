@@ -1,6 +1,4 @@
-// Round fourteen note: traffic still spawns only where the city's
-// relocation pass proved a hull fits — no wheels inside a building,
-// on the boulevard or anywhere else in Puerto Alba.
+// Round seventeen: traffic spawns ride randomRoadPoint's { x, z, heading, axis, line, dir } from the rebuilt city — lanes at the surveyed offsets, never inside a footprint.
 // traffic.js — the ordinary drivers of Puerto Alba: thirty-two cars
 // following the grid lane by lane, brake lights flaring in queues, turns
 // at intersections, and panic. Gunfire within earshot and the whole street

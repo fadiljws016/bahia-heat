@@ -1,6 +1,4 @@
-// Round fourteen note: the gunfight's rules are the approved ones —
-// every shot still draws its tracer, flash and casing through
-// effects.js, and the weapon table the HUD mirrors is untouched.
+// Round seventeen: weapon slots and the fire model stand; staged frames borrow gunshotFx exactly as the live game fires it.
 // combat.js — fists and firearms, rebuilt so a gunfight is something you
 // SEE: every shot is a bright tracer streak with a muzzle flash, a casing
 // spins out of the ejection port, and the impact answers back — sparks off
