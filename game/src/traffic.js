@@ -1,78 +1,78 @@
-// traffic.js — ambient traffic: cars that pick a road, hold their lane and
-// cruise the grid, respawning at the edges so the city never empties.
+// traffic.js — ambient traffic: cars spawn on the road graph (never
+// inside a building), follow their lane, brake for the car ahead and
+// despawn when far away. Lane discipline comes from randomRoadPoint:
+// {axis, line, dir} — axis 'z' means the car travels along z on road x=line.
 
 import { G } from './state.js';
-import { makeRng, pick, clamp, dist2d } from './util.js';
-import { createCar, driveCar, removeCar, CAR_TYPES } from './vehicles.js';
-import { randomRoadPoint, CITY_BOUNDS } from './city.js';
+import { makeRng, pick, dist2d } from './util.js';
+import { randomRoadPoint, ROAD_WIDTH } from './city.js';
+import { createCar, driveCar, syncCarMesh, removeCar } from './vehicles.js';
 
-const TRAFFIC_TYPES = ['sedan', 'sedan', 'sedan', 'sport', 'taxi', 'truck'];
-const LANE = 3.5;
-let _rng = makeRng(808);
+const rng = makeRng(555);
+const TYPES = ['sedan', 'sedan', 'sedan', 'taxi', 'sport', 'truck'];
+const TARGET = 15;
 
-function lanePose(pt) {
-  // Right-hand traffic: the lane sits to the right of the direction of travel.
-  if (pt.axis === 'x') {
-    return {
-      x: pt.line + (pt.dir > 0 ? LANE : -LANE),
-      z: pt.along,
-      heading: pt.dir > 0 ? 0 : Math.PI,
-    };
-  }
-  return {
-    x: pt.along,
-    z: pt.line + (pt.dir > 0 ? -LANE : LANE),
-    heading: pt.dir > 0 ? Math.PI / 2 : -Math.PI / 2,
-  };
+function laneOffset(dir) {
+  return 3.5 * dir;
 }
 
 function spawnTrafficCar() {
-  const pt = randomRoadPoint(_rng);
-  const pose = lanePose(pt);
-  if (G.player && dist2d(pose.x, pose.z, G.player.x, G.player.z) < 24) return null;
-  const type = pick(_rng, TRAFFIC_TYPES);
-  const car = createCar(type, pose.x, pose.z, pose.heading, undefined, _rng);
-  car.driver = 'traffic';
-  car.trafficPt = pt;
-  car.speed = car.type.topSpeed * 0.45;
-  return car;
+  const p = G.player;
+  const rp = randomRoadPoint(rng);
+  let x;
+  let z;
+  let heading;
+  if (rp.axis === 'z') {
+    z = p ? p.z + (rng() < 0.5 ? -1 : 1) * (60 + rng() * 80) : rng() * 500 - 250;
+    x = rp.line + laneOffset(rp.dir);
+    heading = rp.dir > 0 ? 0 : Math.PI;
+  } else {
+    x = p ? p.x + (rng() < 0.5 ? -1 : 1) * (60 + rng() * 80) : rng() * 500 - 250;
+    z = rp.line + laneOffset(rp.dir);
+    heading = rp.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+  }
+  if (x < -246 || x > 286 || z < -300 || z > 300) return;
+  // Never spawn inside a building or on top of another car.
+  if (G.city && G.city.colliders.some((c) => x > c.minX - 3 && x < c.maxX + 3 && z > c.minZ - 3 && z < c.maxZ + 3)) return;
+  if (G.cars.some((c) => dist2d(x, z, c.x, c.z) < 8)) return;
+  const type = pick(rng, TYPES);
+  const car = createCar(type, x, z, heading, undefined, rng);
+  car.traffic = { axis: rp.axis, line: rp.line, dir: rp.dir };
+  car.speed = car.spec.topSpeed * (0.45 + rng() * 0.25);
 }
 
 export function initTraffic() {
-  for (let i = 0; i < 14; i++) spawnTrafficCar();
-}
-
-function recycle(car) {
-  const pt = randomRoadPoint(_rng);
-  const pose = lanePose(pt);
-  car.x = pose.x; car.z = pose.z; car.heading = pose.heading;
-  car.trafficPt = pt;
-  car.speed = car.type.topSpeed * 0.45;
-  car.hp = car.type.hp; car.dead = false;
+  for (let i = 0; i < TARGET; i += 1) spawnTrafficCar();
 }
 
 export function updateTraffic(dt) {
-  if (G.shotMode) return;
-  const traffic = G.cars.filter((c) => c.driver === 'traffic');
-  if (traffic.length < 14) spawnTrafficCar();
-  for (const car of traffic) {
-    if (car.dead) continue;
-    const pt = car.trafficPt;
-    // Drive along the current road; at the bounds, pick a fresh road.
-    let throttle = 0.62;
-    // Slow for the car ahead in the same lane.
+  const p = G.player;
+  let count = 0;
+  for (let i = G.cars.length - 1; i >= 0; i -= 1) {
+    const car = G.cars[i];
+    if (!car.traffic || car.dead || car.police) continue;
+    count += 1;
+    const t = car.traffic;
+    // Brake for whatever is ahead in the lane.
+    let throttle = 0.7;
     for (const o of G.cars) {
       if (o === car) continue;
-      const ahead = (o.x - car.x) * Math.sin(car.heading) + (o.z - car.z) * Math.cos(car.heading);
-      const side = Math.abs((o.x - car.x) * Math.cos(car.heading) - (o.z - car.z) * Math.sin(car.heading));
-      if (ahead > 0 && ahead < 7 && side < 1.6) { throttle = 0; break; }
+      const ahead = t.axis === 'z'
+        ? Math.abs(o.x - car.x) < 2.6 && (o.z - car.z) * t.dir > 0 && (o.z - car.z) * t.dir < 10
+        : Math.abs(o.z - car.z) < 2.6 && (o.x - car.x) * t.dir > 0 && (o.x - car.x) * t.dir < 10;
+      if (ahead) { throttle = -0.4; break; }
     }
-    driveCar(car, { throttle, steer: 0 }, dt);
+    if (p && !p.car && dist2d(p.x, p.z, car.x, car.z) < 7) throttle = -0.6;
+    driveCar(car, { throttle, steer: 0, brake: throttle < 0 }, dt);
     // Hold the lane line.
-    if (pt.axis === 'x') car.x += clamp((pt.line + (pt.dir > 0 ? LANE : -LANE)) - car.x, -dt * 2, dt * 2);
-    else car.z += clamp((pt.line + (pt.dir > 0 ? -LANE : LANE)) - car.z, -dt * 2, dt * 2);
-    const out = car.x < CITY_BOUNDS.minX + 4 || car.x > CITY_BOUNDS.maxX - 4 || car.z < CITY_BOUNDS.minZ + 4 || car.z > CITY_BOUNDS.maxZ - 4;
-    const far = G.player && dist2d(car.x, car.z, G.player.x, G.player.z) > 190;
-    if (out || far) recycle(car);
+    if (t.axis === 'z') car.x += (t.line + laneOffset(t.dir) - car.x) * Math.min(1, dt * 2);
+    else car.z += (t.line + laneOffset(t.dir) - car.z) * Math.min(1, dt * 2);
+    syncCarMesh(car, dt);
+    if (p && dist2d(p.x, p.z, car.x, car.z) > 190) {
+      removeCar(car);
+      count -= 1;
+    }
   }
+  if (count < TARGET && Math.random() < dt * 2) spawnTrafficCar();
+  void ROAD_WIDTH;
 }

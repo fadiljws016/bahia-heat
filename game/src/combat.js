@@ -1,134 +1,122 @@
-// combat.js — the player's gunplay: the weapon table, selection, hitscan
-// fire with the pinned effects language, and area damage for explosions.
+// combat.js — the gunplay: four weapons on a hitscan model with spread,
+// pellets for the shotgun, and every shot dressed by the locked effects
+// recipe. Shots fired in the open are crimes; the PAPD hears them.
 
 import { G } from './state.js';
-import { clamp, dist2d } from './util.js';
-import { gunshotFx, burst } from './effects.js';
+import { dist2d, wrapAngle } from './util.js';
 import { input } from './input.js';
-import { refreshWeaponMesh, hurtPlayer } from './player.js';
-import { hurtOfficer } from './officers.js';
+import { camYaw } from './camera.js';
+import { gunshotFx, burst } from './effects.js';
+import { showWeapon } from './people.js';
 import { hurtPed } from './pedestrians.js';
+import { hurtPlayer } from './player.js';
+import { hurtOfficer } from './officers.js';
 import { damageCar } from './vehicles.js';
 import { addCrime } from './police.js';
+import { sfx } from './audio.js';
 
 export const SLOT_ORDER = ['fists', 'pistol', 'smg', 'shotgun'];
+
 export const WEAPONS = {
-  fists: { name: 'Fists', slot: 1, damage: 12, rof: 0.34, range: 1.9, spread: 0, pellets: 1, auto: false },
-  pistol: { name: 'P-9 Pistol', slot: 2, damage: 26, rof: 0.26, range: 46, spread: 0.012, pellets: 1, auto: false },
-  smg: { name: 'Kobra SMG', slot: 3, damage: 17, rof: 0.085, range: 40, spread: 0.03, pellets: 1, auto: true },
-  shotgun: { name: 'Muelle 12ga', slot: 4, damage: 13, rof: 0.85, range: 24, spread: 0.055, pellets: 6, auto: false },
+  fists: { name: 'Fists', dmg: 12, rate: 0.35, range: 2.0, spread: 0, pellets: 1, auto: false, flash: 0 },
+  pistol: { name: 'P-9 Pistol', dmg: 26, rate: 0.27, range: 46, spread: 0.02, pellets: 1, auto: false, flash: 0.9, ammo: 'pistol' },
+  smg: { name: 'Kobra SMG', dmg: 15, rate: 0.09, range: 40, spread: 0.05, pellets: 1, auto: true, flash: 0.8, ammo: 'smg' },
+  shotgun: { name: 'Muelle 12ga', dmg: 11, rate: 0.85, range: 23, spread: 0.11, pellets: 6, auto: false, flash: 1.5, ammo: 'shotgun' },
 };
 
-let _cooldown = 0;
-let _triggerHeld = false;
+let cooldown = 0;
+let wasFiring = false;
+const muzzleV = new THREE.Vector3();
 
 export function selectWeapon(key) {
-  if (!WEAPONS[key] || !G.unlocked[key]) return false;
-  G.weapon = key;
-  refreshWeaponMesh();
-  return true;
-}
-
-function aimDirection() {
-  // Shots fly from the camera through its centre.
-  const dir = new THREE.Vector3();
-  G.camera.getWorldDirection(dir);
-  return dir;
-}
-
-function muzzlePoint() {
+  if (!WEAPONS[key]) return;
+  if (!G.weapons.unlocked[key]) { sfx.dryFire(); return; }
+  G.weapons.current = key;
   const p = G.player;
-  return {
-    x: p.x + Math.sin(p.heading) * 0.45,
-    y: 1.32,
-    z: p.z + Math.cos(p.heading) * 0.45,
+  if (p && !p.car) showWeapon(p.mesh, key, key === 'fists' ? null : 'hand');
+}
+
+function muzzlePos(p) {
+  const w = p.mesh.userData.weapon;
+  if (w) {
+    w.updateWorldMatrix(true, false);
+    muzzleV.copy(w.userData.muzzleLocal || new THREE.Vector3(0, 0, 0.3));
+    w.localToWorld(muzzleV);
+    return muzzleV;
+  }
+  muzzleV.set(p.x + Math.sin(p.heading) * 0.4, 1.32, p.z + Math.cos(p.heading) * 0.4);
+  return muzzleV;
+}
+
+function bestTarget(p, dirA, range, spread) {
+  let best = null;
+  let bestD = range;
+  const consider = (x, z, y, hit) => {
+    const d = dist2d(p.x, p.z, x, z);
+    if (d > range || d < 0.6) return;
+    const ang = Math.atan2(x - p.x, z - p.z);
+    if (Math.abs(wrapAngle(ang - dirA)) > spread + 0.1) return;
+    if (d < bestD) { bestD = d; best = { x, z, y, hit, d }; }
   };
+  for (const off of G.officers) if (!off.dead) consider(off.x, off.z, 1.2, () => hurtOfficer(off, 0));
+  for (const ped of G.peds) if (!ped.dead) consider(ped.x, ped.z, 1.15, () => hurtPed(ped, 0));
+  for (const car of G.cars) if (!car.dead) consider(car.x, car.z, 0.9, () => damageCar(car, 0, true));
+  return best;
 }
 
-function applyHit(point, weapon) {
-  let bestActor = null, bestKind = null, bestD = 2.2;
-  for (const o of G.officers) {
-    if (o.down) continue;
-    const d = dist2d(point.x, point.z, o.x, o.z);
-    if (d < bestD) { bestD = d; bestActor = o; bestKind = 'officer'; }
-  }
-  for (const ped of G.peds) {
-    if (ped.down || ped.staged) continue;
-    const d = dist2d(point.x, point.z, ped.x, ped.z);
-    if (d < bestD) { bestD = d; bestActor = ped; bestKind = 'ped'; }
-  }
-  if (bestKind === 'officer') hurtOfficer(bestActor, weapon.damage);
-  else if (bestKind === 'ped') { hurtPed(bestActor, weapon.damage); addCrime(0.7, 'Assault'); }
-  for (const car of G.cars) {
-    if (car.dead) continue;
-    if (dist2d(point.x, point.z, car.x, car.z) < car.type.L / 2) {
-      damageCar(car, weapon.damage * 0.7, true);
-      burst(point.x, 0.8, point.z, 0xffcf7a, 3, 1.6, {});
-      break;
-    }
-  }
-  if (bestKind === 'officer') addCrime(1.2, 'Shots at PAPD');
-}
-
-function fireOnce(weapon) {
+export function splashDamage(x, z, radius, power) {
+  for (const ped of G.peds) if (!ped.dead && dist2d(x, z, ped.x, ped.z) < radius) hurtPed(ped, power);
+  for (const off of G.officers) if (!off.dead && dist2d(x, z, off.x, off.z) < radius) hurtOfficer(off, power);
   const p = G.player;
-  const m = muzzlePoint();
-  const dir = aimDirection();
-  for (let i = 0; i < weapon.pellets; i++) {
-    const sx = (Math.random() - 0.5) * weapon.spread * 2;
-    const sy = (Math.random() - 0.5) * weapon.spread;
-    const d = dir.clone();
-    d.x += sx; d.y += sy;
-    d.normalize();
-    const tx = m.x + d.x * weapon.range;
-    const ty = Math.max(0.15, m.y + d.y * weapon.range);
-    const tz = m.z + d.z * weapon.range;
-    gunshotFx(m.x, m.y, m.z, tx, ty, tz, { heading: p.heading, impact: i === 0 });
-    if (i === 0 || weapon.pellets > 1) applyHit({ x: tx, z: tz }, weapon);
-  }
-  if (weapon !== WEAPONS.fists && G.ammo[G.weapon] !== undefined) {
-    G.ammo[G.weapon] = Math.max(0, G.ammo[G.weapon] - 1);
-  }
-  p.pose = 'fire';
-  p.phase += 0.4;
+  if (p && dist2d(x, z, p.x, p.z) < radius) hurtPlayer(power * 0.5);
 }
 
 export function updateCombat(dt) {
-  if (_cooldown > 0) _cooldown -= dt;
+  cooldown = Math.max(0, cooldown - dt);
   const p = G.player;
-  if (!p || p.car || G.shotMode || G.over) return;
-  // Number keys and wheel-free selection.
-  for (let i = 0; i < SLOT_ORDER.length; i++) {
-    if (input.pressed[`Digit${i + 1}`]) selectWeapon(SLOT_ORDER[i]);
+  if (!p || p.dead || p.car || G.dialogue || G.mapOpen) { wasFiring = input.firing; return; }
+  for (let i = 0; i < SLOT_ORDER.length; i += 1) {
+    if (input.keys[`Digit${i + 1}`]) selectWeapon(SLOT_ORDER[i]);
   }
-  const weapon = WEAPONS[G.weapon];
-  const wantFire = input.mouseDown && (weapon.auto || !_triggerHeld);
-  if (input.mouseDown) _triggerHeld = true; else _triggerHeld = false;
-  if (!wantFire || _cooldown > 0) return;
-  if (G.weapon !== 'fists' && G.ammo[G.weapon] <= 0) { _cooldown = 0.3; return; }
-  _cooldown = weapon.rof;
-  if (G.weapon === 'fists') {
-    p.pose = 'fire';
-    // A swung fist: nearest actor within range takes it.
-    for (const o of G.officers) if (!o.down && dist2d(p.x, p.z, o.x, o.z) < weapon.range) { hurtOfficer(o, weapon.damage); addCrime(0.8, 'Assault'); break; }
-    for (const ped of G.peds) if (!ped.down && !ped.staged && dist2d(p.x, p.z, ped.x, ped.z) < weapon.range) { hurtPed(ped, weapon.damage); addCrime(0.5, 'Assault'); break; }
+  const key = G.weapons.current;
+  const w = WEAPONS[key];
+  const wantFire = input.firing && (w.auto || !wasFiring);
+  wasFiring = input.firing;
+  if (!wantFire || cooldown > 0) return;
+  if (key !== 'fists' && (G.weapons.ammo[w.ammo] || 0) <= 0) {
+    sfx.dryFire();
+    cooldown = 0.3;
     return;
   }
-  fireOnce(weapon);
-}
-
-// Area damage shared by explosions and crashing wrecks.
-export function splashDamage(x, z, radius, power) {
-  for (const o of G.officers) {
-    if (!o.down && dist2d(x, z, o.x, o.z) < radius) hurtOfficer(o, power);
+  cooldown = w.rate;
+  p.heading = camYaw();
+  const m = muzzlePos(p);
+  if (key === 'fists') {
+    const t = bestTarget(p, p.heading, w.range, 0.5);
+    if (t) {
+      if (t.hit) { /* damage applied below via direct call */ }
+      for (const ped of G.peds) if (!ped.dead && dist2d(p.x, p.z, ped.x, ped.z) < w.range + 0.6) hurtPed(ped, w.dmg);
+      for (const off of G.officers) if (!off.dead && dist2d(p.x, p.z, off.x, off.z) < w.range + 0.6) hurtOfficer(off, w.dmg);
+      sfx.hit();
+    }
+    return;
   }
-  for (const ped of G.peds) {
-    if (!ped.down && dist2d(x, z, ped.x, ped.z) < radius) hurtPed(ped, power * 0.8);
+  G.weapons.ammo[w.ammo] -= 1;
+  sfx.shot(key);
+  addCrime(0.3, 'shots fired');
+  for (let pellet = 0; pellet < w.pellets; pellet += 1) {
+    const dirA = p.heading + (Math.random() - 0.5) * 2 * w.spread;
+    const t = bestTarget(p, dirA, w.range, w.spread);
+    const tx = t ? t.x : p.x + Math.sin(dirA) * w.range;
+    const tz = t ? t.z : p.z + Math.cos(dirA) * w.range;
+    const ty = t ? t.y : 1.1;
+    gunshotFx(m.x, m.y, m.z, tx, ty, tz, { heading: p.heading, flashScale: w.flash, sparks: pellet === 0 ? 3 : 1 });
+    if (t) {
+      // Apply the pellet's damage to whatever the ray found.
+      for (const off of G.officers) if (!off.dead && Math.abs(off.x - t.x) < 0.1 && Math.abs(off.z - t.z) < 0.1) hurtOfficer(off, w.dmg);
+      for (const ped of G.peds) if (!ped.dead && Math.abs(ped.x - t.x) < 0.1 && Math.abs(ped.z - t.z) < 0.1) hurtPed(ped, w.dmg);
+      for (const car of G.cars) if (!car.dead && Math.abs(car.x - t.x) < 0.1 && Math.abs(car.z - t.z) < 0.1) damageCar(car, w.dmg, true);
+    }
   }
-  for (const car of G.cars) {
-    if (!car.dead && dist2d(x, z, car.x, car.z) < radius + car.type.L / 2) damageCar(car, power * 0.8, true);
-  }
-  if (G.player && dist2d(x, z, G.player.x, G.player.z) < radius) {
-    hurtPlayer(power * 0.5);
-  }
+  if (p.pose !== 'aim') p.pose = 'aim';
 }

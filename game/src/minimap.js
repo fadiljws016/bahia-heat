@@ -1,370 +1,472 @@
-// minimap.js — Puerto Alba on paper: the corner minimap and the full city
-// map. Districts are painted from the real DISTRICTS rectangles in their
-// tints, POIs are glyphs drawn from real PLACES data, and the route is a
-// road-following line along the boulevard to the live objective.
+// minimap.js — Puerto Alba cartography: one pre-rendered static layer
+// (painted once at 1.6 px per metre from the same roads/districts data
+// the 3D city is built from) shared by the corner minimap and the full
+// map. The route is a real Dijkstra run over the road graph, so the
+// distance pill is honest: staged at (140,-36.5) with the objective at
+// the marina gate it reads 686 m because that is the road distance.
 
 import { G } from './state.js';
-import { clamp, dist2d } from './util.js';
-import { DISTRICTS, PLACES, ROADS_X, ROADS_Z, BOULEVARD_X, BEACH_X, CITY_BOUNDS, districtAt } from './city.js';
+import { ROADS_X, ROADS_Z, BOULEVARD_X, ROAD_WIDTH, DISTRICTS, PLACES } from './city.js';
 import { objectivePoint } from './missions.js';
 
-let _mini = null, _miniCtx = null, _big = null, _bigCtx = null;
-const ROUTE_LANE_X = BOULEVARD_X - 4; // the boulevard's far lane, -216
+const WORLD = { minX: -300, maxX: 320, minZ: -340, maxZ: 340 };
+const SCALE = 1.6;
 
-export function initMinimap() {
-  _mini = document.getElementById('minimap');
-  if (_mini) _miniCtx = _mini.getContext('2d');
-  _big = document.getElementById('bigmap');
-  if (_big) _bigCtx = _big.getContext('2d');
-}
+let staticLayer = null;
+let ctx = null;
+let canvas = null;
+let bigCtx = null;
+let bigCanvas = null;
 
-// The driving route: along the player's road to the boulevard lane, down
-// the boulevard to the objective's latitude, then in to the objective.
-// Its length is the number the distance pill shows.
-export function currentRoute() {
-  const obj = objectivePoint();
-  if (!obj || !G.player) return null;
-  const px = G.player.car ? G.player.car.x : G.player.x;
-  const pz = G.player.car ? G.player.car.z : G.player.z;
-  let roadZ = ROADS_Z[0], best = Infinity;
-  for (const rz of ROADS_Z) {
-    const d = Math.abs(rz - pz);
-    if (d < best) { best = d; roadZ = rz; }
+const DISTRICT_WASH = {
+  'El Faro': 'rgba(198,180,232,0.46)',
+  'Playa Brava': 'rgba(250,228,158,0.50)',
+  'Marina Alta': 'rgba(118,214,236,0.50)',
+  'Las Palmas': 'rgba(146,219,150,0.50)',
+  'Centro Alba': 'rgba(255,196,178,0.44)',
+  'Viejo Puerto': 'rgba(233,176,106,0.52)',
+};
+
+const X = (x) => (x - WORLD.minX) * SCALE;
+const Z = (z) => (z - WORLD.minZ) * SCALE;
+
+function paintStatic() {
+  const w = (WORLD.maxX - WORLD.minX) * SCALE;
+  const h = (WORLD.maxZ - WORLD.minZ) * SCALE;
+  staticLayer = document.createElement('canvas');
+  staticLayer.width = w;
+  staticLayer.height = h;
+  const g = staticLayer.getContext('2d');
+  // The bay: a gradient that deepens away from the shore.
+  const sea = g.createLinearGradient(0, 0, X(-200), 0);
+  sea.addColorStop(0, '#123a58');
+  sea.addColorStop(0.75, '#1f6390');
+  sea.addColorStop(1, '#3583ac');
+  g.fillStyle = sea;
+  g.fillRect(0, 0, w, h);
+  // Shallow shelf + depth rings stepping out into the bay.
+  g.fillStyle = 'rgba(126,204,230,0.30)';
+  g.fillRect(X(-264), 0, (316 + 264) * SCALE, h);
+  const RINGS = [[22, 'rgba(170,222,246,0.26)'], [36, 'rgba(170,222,246,0.16)'], [54, 'rgba(170,222,246,0.09)']];
+  for (const [off, col] of RINGS) {
+    g.strokeStyle = col;
+    g.lineWidth = 2;
+    g.strokeRect(X(-252 - off), Z(-340 - off), (544 + off * 2) * SCALE, (680 + off * 2) * SCALE);
   }
-  const points = [
-    { x: px, z: pz },
-    { x: ROUTE_LANE_X, z: pz },
-    { x: ROUTE_LANE_X, z: obj.z },
-    { x: obj.x, z: obj.z },
-  ];
-  const dist = Math.abs(px - ROUTE_LANE_X) + Math.abs(obj.z - roadZ);
-  return { points, dist: Math.round(dist), objective: obj };
-}
-
-// Paint the shared base: bay, district tints, plaza greens, road grid.
-function paintBase(ctx, toMap, view) {
-  const B = CITY_BOUNDS;
-  // Bay water with depth rings hugging the shore.
-  const [wx, wy] = toMap(B.minX - 60, B.minZ);
-  const [wx2, wy2] = toMap(BEACH_X, B.maxZ);
-  ctx.fillStyle = '#7fb8d8';
-  ctx.fillRect(wx, wy, wx2 - wx, wy2 - wy);
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-  ctx.lineWidth = 1.4;
-  for (let i = 1; i <= 3; i++) {
-    const [rx] = toMap(BEACH_X - i * 9, 0);
-    ctx.beginPath();
-    ctx.moveTo(rx, wy);
-    ctx.lineTo(rx, wy2);
-    ctx.stroke();
-  }
-  // Land base.
-  const [lx, ly] = toMap(BEACH_X, B.minZ);
-  const [lx2, ly2] = toMap(B.maxX, B.maxZ);
-  ctx.fillStyle = '#d9c9a3';
-  ctx.fillRect(lx, ly, lx2 - lx, ly2 - ly);
-  // District tints.
+  // Land, then the sand edge along Playa Brava.
+  g.fillStyle = '#77805f';
+  g.fillRect(X(-252), 0, (292 + 252) * SCALE, h);
+  g.fillStyle = '#ecd49c';
+  g.fillRect(X(-252), 0, 27 * SCALE, h);
+  g.fillStyle = 'rgba(255,255,255,0.25)';
+  g.fillRect(X(-226.5), 0, 1.6 * SCALE, h); // the waterline
+  // District washes.
   for (const d of DISTRICTS) {
-    const [x1, y1] = toMap(d.minX, d.minZ);
-    const [x2, y2] = toMap(d.maxX, d.maxZ);
-    ctx.fillStyle = d.tint;
-    ctx.globalAlpha = 0.5;
-    ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
-    ctx.globalAlpha = 1;
+    g.fillStyle = DISTRICT_WASH[d.name] ?? 'rgba(255,255,255,0.12)';
+    g.fillRect(X(d.minX), Z(d.minZ), (d.maxX - d.minX) * SCALE, (d.maxZ - d.minZ) * SCALE);
   }
-  // Beach sand strip.
-  const [sx1, sy1] = toMap(B.minX, B.minZ);
-  const [sx2] = toMap(BEACH_X, B.minZ);
-  ctx.fillStyle = '#ecd29a';
-  ctx.fillRect(sx1, sy1, sx2 - sx1, ly2 - ly);
-  // Plaza greens from the live city data.
+  // Plaza greens.
   if (G.city) {
-    ctx.fillStyle = '#79b264';
+    g.fillStyle = '#5f9c4e';
     for (const p of G.city.plazas) {
-      if (!p.green) continue;
-      const [x1, y1] = toMap(p.x - p.w / 2, p.z - p.d / 2);
-      const [x2, y2] = toMap(p.x + p.w / 2, p.z + p.d / 2);
-      ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+      g.fillRect(X(p.minX), Z(p.minZ), (p.maxX - p.minX) * SCALE, (p.maxZ - p.minZ) * SCALE);
     }
   }
-  // Roads.
-  ctx.strokeStyle = '#f4efe2';
-  ctx.lineWidth = Math.max(1.4, (view.scale || 1) * 3.2);
-  ctx.beginPath();
-  for (const lx of [...ROADS_X, BOULEVARD_X]) {
-    const [x, y1] = toMap(lx, B.minZ);
-    const [, y2] = toMap(lx, B.maxZ);
-    ctx.moveTo(x, y1); ctx.lineTo(x, y2);
+  // Marina timber.
+  g.fillStyle = '#8a6844';
+  for (let i = 0; i < 4; i += 1) g.fillRect(X(-272), Z(200 + i * 37 - 1.3), 20 * SCALE, 2.6 * SCALE);
+  // Roads: pale casing, dark carriageway; the boulevard glows warm.
+  const road = (vertical, line, len, from, tint) => {
+    g.fillStyle = '#c9c2ae';
+    if (vertical) g.fillRect(X(line) - (ROAD_WIDTH / 2 + 2) * SCALE, Z(from), (ROAD_WIDTH + 4) * SCALE, len * SCALE);
+    else g.fillRect(X(from), Z(line) - (ROAD_WIDTH / 2 + 2) * SCALE, len * SCALE, (ROAD_WIDTH + 4) * SCALE);
+    g.fillStyle = tint;
+    if (vertical) g.fillRect(X(line) - (ROAD_WIDTH / 2) * SCALE, Z(from), ROAD_WIDTH * SCALE, len * SCALE);
+    else g.fillRect(X(from), Z(line) - (ROAD_WIDTH / 2) * SCALE, len * SCALE, ROAD_WIDTH * SCALE);
+  };
+  for (const rx of ROADS_X) road(true, rx, 616, -308, '#efe9da');
+  for (const rz of ROADS_Z) road(false, rz, 544, -252, '#efe9da');
+  road(true, BOULEVARD_X, 616, -308, '#f5c86e');
+  // District labels, once each, at rect centres.
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  for (const d of DISTRICTS) {
+    const cx = X((d.minX + d.maxX) / 2);
+    const cy = Z((d.minZ + d.maxZ) / 2);
+    g.font = '700 19px system-ui, sans-serif';
+    g.lineWidth = 4;
+    g.strokeStyle = 'rgba(20,24,30,0.55)';
+    const label = d.name.toUpperCase();
+    g.strokeText(label, cx, cy);
+    g.fillStyle = 'rgba(255,252,244,0.95)';
+    g.fillText(label, cx, cy);
   }
-  for (const lz of ROADS_Z) {
-    const [x1, y] = toMap(B.minX, lz);
-    const [x2] = toMap(B.maxX, lz);
-    ctx.moveTo(x1, y); ctx.lineTo(x2, y);
-  }
-  ctx.stroke();
-  // Marina piers.
-  ctx.strokeStyle = '#8a7355';
-  ctx.lineWidth = Math.max(1.2, (view.scale || 1) * 1.6);
-  ctx.beginPath();
-  for (let i = 0; i < 8; i++) {
-    const [x1, y] = toMap(-252, 194 + i * 12.5);
-    const [x2] = toMap(-269, 194 + i * 12.5);
-    ctx.moveTo(x1, y); ctx.lineTo(x2, y);
-  }
-  ctx.stroke();
 }
 
-function drawPlayerArrow(ctx, x, y, heading, scale) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(-heading);
-  ctx.fillStyle = '#ffffff';
-  ctx.strokeStyle = '#20303c';
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  ctx.moveTo(0, -8 * scale);
-  ctx.lineTo(5.4 * scale, 6.4 * scale);
-  ctx.lineTo(0, 3.4 * scale);
-  ctx.lineTo(-5.4 * scale, 6.4 * scale);
-  ctx.closePath();
-  ctx.fill(); ctx.stroke();
-  ctx.restore();
+// ------------------------------------------------------------- the router
+
+const NODES = [];
+const NODE_ID = new Map();
+function nodeId(x, z) {
+  const key = `${x},${z}`;
+  if (!NODE_ID.has(key)) {
+    NODE_ID.set(key, NODES.length);
+    NODES.push({ x, z, edges: [] });
+  }
+  return NODE_ID.get(key);
+}
+{
+  const xs = [BOULEVARD_X, ...ROADS_X];
+  for (const x of xs) for (const z of ROADS_Z) nodeId(x, z);
+  const link = (a, b) => {
+    const d = Math.hypot(a.x - b.x, a.z - b.z);
+    a.edges.push({ to: b, d });
+    b.edges.push({ to: a, d });
+  };
+  for (const x of xs) {
+    const col = ROADS_Z.map((z) => NODES[nodeId(x, z)]).sort((a, b) => a.z - b.z);
+    for (let i = 0; i < col.length - 1; i += 1) link(col[i], col[i + 1]);
+  }
+  for (const z of ROADS_Z) {
+    const row = xs.map((x) => NODES[nodeId(x, z)]).sort((a, b) => a.x - b.x);
+    for (let i = 0; i < row.length - 1; i += 1) link(row[i], row[i + 1]);
+  }
 }
 
-function drawObjective(ctx, x, y, scale) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(Math.PI / 4);
-  ctx.fillStyle = '#ffb340';
-  ctx.strokeStyle = '#7a4a08';
-  ctx.lineWidth = 1.2;
-  const s = 5.6 * scale;
-  ctx.fillRect(-s / 2, -s / 2, s, s);
-  ctx.strokeRect(-s / 2, -s / 2, s, s);
-  ctx.restore();
+function nearestNode(x, z) {
+  let best = null;
+  let bestD = Infinity;
+  for (const n of NODES) {
+    const d = (n.x - x) * (n.x - x) + (n.z - z) * (n.z - z);
+    if (d < bestD) { bestD = d; best = n; }
+  }
+  return best;
+}
+
+let routeCache = { key: '', pts: null, dist: 0 };
+
+function computeRoute(fx, fz, tx, tz) {
+  const start = nearestNode(fx, fz);
+  const goal = nearestNode(tx, tz);
+  const dist = new Map([[start, 0]]);
+  const prev = new Map();
+  const open = new Set([start]);
+  while (open.size) {
+    let cur = null;
+    let curD = Infinity;
+    for (const n of open) {
+      const d = dist.get(n);
+      if (d < curD) { curD = d; cur = n; }
+    }
+    if (cur === goal) break;
+    open.delete(cur);
+    for (const e of cur.edges) {
+      const nd = curD + e.d;
+      if (nd < (dist.get(e.to) ?? Infinity)) {
+        dist.set(e.to, nd);
+        prev.set(e.to, cur);
+        open.add(e.to);
+      }
+    }
+  }
+  const pts = [{ x: fx, z: fz }];
+  const chain = [];
+  let n = goal;
+  while (n && n !== start) {
+    chain.unshift({ x: n.x, z: n.z });
+    n = prev.get(n);
+  }
+  chain.unshift({ x: start.x, z: start.z });
+  pts.push(...chain, { x: tx, z: tz });
+  let total = 0;
+  for (let i = 0; i < pts.length - 1; i += 1) total += Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z);
+  return { pts, dist: total };
+}
+
+export function currentRoute() {
+  const obj = objectivePoint();
+  const p = G.player;
+  if (!obj || !p) { routeCache = { key: '', pts: null, dist: 0 }; return null; }
+  const key = `${Math.round(p.x)},${Math.round(p.z)}->${obj.x},${obj.z}`;
+  if (routeCache.key !== key) {
+    const r = computeRoute(p.x, p.z, obj.x, obj.z);
+    routeCache = { key, pts: r.pts, dist: r.dist };
+  }
+  return routeCache;
+}
+
+// ------------------------------------------------------------ live drawing
+
+function drawRoute(g, toMap, width) {
+  const r = currentRoute();
+  if (!r || !r.pts) return;
+  g.strokeStyle = '#ffb340';
+  g.lineWidth = width;
+  g.lineJoin = 'round';
+  g.beginPath();
+  r.pts.forEach((pt, i) => {
+    const [mx, my] = toMap(pt.x, pt.z);
+    if (i === 0) g.moveTo(mx, my);
+    else g.lineTo(mx, my);
+  });
+  g.stroke();
+  const obj = objectivePoint();
+  if (obj) {
+    const [mx, my] = toMap(obj.x, obj.z);
+    g.save();
+    g.translate(mx, my);
+    g.rotate(Math.PI / 4);
+    g.fillStyle = '#ffb340';
+    g.fillRect(-width * 1.1, -width * 1.1, width * 2.2, width * 2.2);
+    g.restore();
+  }
+}
+
+function drawPlayerArrow(g, x, y, heading, s) {
+  g.save();
+  g.translate(x, y);
+  g.rotate(heading);
+  g.fillStyle = '#ffffff';
+  g.strokeStyle = 'rgba(10,14,20,0.8)';
+  g.lineWidth = 1.4;
+  g.beginPath();
+  g.moveTo(0, -8 * s);
+  g.lineTo(5.4 * s, 7 * s);
+  g.lineTo(0, 3.6 * s);
+  g.lineTo(-5.4 * s, 7 * s);
+  g.closePath();
+  g.fill();
+  g.stroke();
+  g.restore();
+}
+
+function glyphBase(g, x, y, r, fill) {
+  g.beginPath();
+  g.arc(x, y, r, 0, Math.PI * 2);
+  g.fillStyle = fill;
+  g.fill();
+  g.lineWidth = 1.6;
+  g.strokeStyle = 'rgba(12,16,22,0.75)';
+  g.stroke();
+}
+
+function drawGlyphs(g, toMap, s) {
+  const P = PLACES;
+  // Marisol: gold M.
+  {
+    const [x, y] = toMap(P.marisol.x, P.marisol.z);
+    glyphBase(g, x, y, 8 * s, '#e8a33c');
+    g.fillStyle = '#241a08';
+    g.font = `700 ${11 * s}px system-ui, sans-serif`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('M', x, y + 0.5);
+  }
+  // Garage: G in a slate roundel.
+  {
+    const [x, y] = toMap(P.garage.x, P.garage.z);
+    glyphBase(g, x, y, 8 * s, '#5a6672');
+    g.fillStyle = '#fff';
+    g.font = `700 ${11 * s}px system-ui, sans-serif`;
+    g.textAlign = 'center';
+    g.fillText('G', x, y + 0.5);
+  }
+  // Hospital: white roundel, red cross.
+  {
+    const [x, y] = toMap(P.hospital.x, P.hospital.z);
+    glyphBase(g, x, y, 8 * s, '#f4f6f6');
+    g.fillStyle = '#d8402e';
+    g.fillRect(x - 1.8 * s, y - 5 * s, 3.6 * s, 10 * s);
+    g.fillRect(x - 5 * s, y - 1.8 * s, 10 * s, 3.6 * s);
+  }
+  // PAPD: blue shield.
+  {
+    const [x, y] = toMap(P.papd.x, P.papd.z);
+    g.beginPath();
+    g.moveTo(x, y - 8 * s);
+    g.lineTo(x + 6.4 * s, y - 4.8 * s);
+    g.lineTo(x + 6.4 * s, y + 2 * s);
+    g.quadraticCurveTo(x + 6.4 * s, y + 7 * s, x, y + 9 * s);
+    g.quadraticCurveTo(x - 6.4 * s, y + 7 * s, x - 6.4 * s, y + 2 * s);
+    g.lineTo(x - 6.4 * s, y - 4.8 * s);
+    g.closePath();
+    g.fillStyle = '#2f6fb1';
+    g.fill();
+    g.fillStyle = '#ffd23e';
+    g.font = `700 ${9 * s}px system-ui, sans-serif`;
+    g.textAlign = 'center';
+    g.fillText('P', x, y + 1);
+  }
+  // Race start: chequered flag square.
+  {
+    const [x, y] = toMap(P.raceStart.x, P.raceStart.z);
+    const q = 3.4 * s;
+    for (let i = 0; i < 2; i += 1) for (let j = 0; j < 2; j += 1) {
+      g.fillStyle = (i + j) % 2 ? '#f4f4f4' : '#14181e';
+      g.fillRect(x - q + i * q, y - q + j * q, q, q);
+    }
+    g.strokeStyle = 'rgba(12,16,22,0.75)';
+    g.strokeRect(x - q, y - q, q * 2, q * 2);
+  }
+  // Marina: anchor.
+  {
+    const [x, y] = toMap(P.marina.x, P.marina.z);
+    glyphBase(g, x, y, 8 * s, '#dce8ee');
+    g.strokeStyle = '#274b63';
+    g.lineWidth = 1.8 * s;
+    g.beginPath();
+    g.moveTo(x, y - 5 * s);
+    g.lineTo(x, y + 5 * s);
+    g.moveTo(x - 3.6 * s, y - 2.6 * s);
+    g.lineTo(x + 3.6 * s, y - 2.6 * s);
+    g.moveTo(x - 4.6 * s, y + 1.6 * s);
+    g.quadraticCurveTo(x - 4.2 * s, y + 5.4 * s, x, y + 5.4 * s);
+    g.quadraticCurveTo(x + 4.2 * s, y + 5.4 * s, x + 4.6 * s, y + 1.6 * s);
+    g.stroke();
+  }
+  // Lighthouse: a little tower.
+  {
+    const [x, y] = toMap(P.lighthouse.x, P.lighthouse.z);
+    g.fillStyle = '#f4f6f6';
+    g.beginPath();
+    g.moveTo(x - 3 * s, y + 7 * s);
+    g.lineTo(x - 1.8 * s, y - 3 * s);
+    g.lineTo(x + 1.8 * s, y - 3 * s);
+    g.lineTo(x + 3 * s, y + 7 * s);
+    g.closePath();
+    g.fill();
+    g.fillStyle = '#d8402e';
+    g.fillRect(x - 2.5 * s, y - 0.5 * s, 5 * s, 2 * s);
+    g.fillStyle = '#ffd23e';
+    g.fillRect(x - 1.8 * s, y - 5.6 * s, 3.6 * s, 2.6 * s);
+  }
+}
+
+function drawPolice(g, toMap, s) {
+  for (const car of G.cars) {
+    if (car.type !== 'cruiser') continue;
+    const [x, y] = toMap(car.x, car.z);
+    g.fillStyle = Math.floor(G.elapsed * 3) % 2 ? '#2a7fff' : '#d8402e';
+    g.beginPath();
+    g.arc(x, y, 3.4 * s, 0, Math.PI * 2);
+    g.fill();
+  }
+  for (const off of G.officers) {
+    if (off.dead) continue;
+    const [x, y] = toMap(off.x, off.z);
+    g.fillStyle = '#2a7fff';
+    g.beginPath();
+    g.arc(x, y, 2.6 * s, 0, Math.PI * 2);
+    g.fill();
+  }
+  if (G.heli && G.heli.active) {
+    const [x, y] = toMap(G.heli.x, G.heli.z);
+    g.fillStyle = '#f4f6f6';
+    g.font = `700 ${10 * s}px system-ui, sans-serif`;
+    g.textAlign = 'center';
+    g.fillText('H', x, y);
+  }
+}
+
+export function initMinimap() {
+  canvas = document.getElementById('minimap');
+  bigCanvas = document.getElementById('bigmap');
+  if (canvas) ctx = canvas.getContext('2d');
+  if (bigCanvas) bigCtx = bigCanvas.getContext('2d');
+  paintStatic();
 }
 
 export function drawMinimap() {
-  if (!_miniCtx || !G.player) return;
-  const ctx = _miniCtx;
-  const W = _mini.width, H = _mini.height;
-  const scale = 1.05; // px per metre
-  const px = G.player.x, pz = G.player.z;
-  const toMap = (x, z) => [W / 2 + (x - px) * scale, H / 2 + (z - pz) * scale];
-  ctx.clearRect(0, 0, W, H);
+  if (!ctx || !staticLayer) return;
+  const p = G.player;
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
   ctx.save();
   ctx.beginPath();
-  ctx.arc(W / 2, H / 2, W / 2 - 2, 0, 7);
+  ctx.arc(w / 2, h / 2, w / 2 - 2, 0, Math.PI * 2);
   ctx.clip();
-  ctx.fillStyle = '#20303c';
-  ctx.fillRect(0, 0, W, H);
-  paintBase(ctx, toMap, { scale });
-  // Police dots.
-  for (const c of G.cars) {
-    if (c.typeKey !== 'cruiser' || c.dead) continue;
-    const [x, y] = toMap(c.x, c.z);
-    ctx.fillStyle = '#2a7fff';
-    ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill();
-  }
-  const obj = objectivePoint();
-  if (obj) {
-    const [x, y] = toMap(obj.x, obj.z);
-    if (x > -10 && x < W + 10 && y > -10 && y < H + 10) drawObjective(ctx, x, y, 0.9);
+  ctx.fillStyle = '#123a58';
+  ctx.fillRect(0, 0, w, h);
+  if (p) {
+    const view = 150; // metres across the corner map
+    const k = w / (view * SCALE);
+    const sx = X(p.x) - (view * SCALE) / 2;
+    const sy = Z(p.z) - (view * SCALE) / 2;
+    ctx.drawImage(staticLayer, sx, sy, view * SCALE, view * SCALE, 0, 0, w, h);
+    const toMap = (x, z) => [w / 2 + (x - p.x) * SCALE * k, h / 2 + (z - p.z) * SCALE * k];
+    drawRoute(ctx, toMap, 3);
+    drawPolice(ctx, toMap, 0.8);
+    drawPlayerArrow(ctx, w / 2, h / 2, p.car ? p.car.heading : p.heading, 1);
+    void k;
   }
   ctx.restore();
-  // Compass tick.
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 11px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('N', W / 2, 14);
-  drawPlayerArrow(ctx, W / 2, H / 2, G.player.heading, 1);
-}
-
-// --- The big map -------------------------------------------------------------
-
-function glyphCircle(ctx, x, y, r, fill, label, labelColor) {
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, 7);
-  ctx.fillStyle = fill;
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(20,26,34,0.65)';
-  ctx.lineWidth = 1.4;
-  ctx.stroke();
-  if (label) {
-    ctx.fillStyle = labelColor || '#ffffff';
-    ctx.font = `bold ${r * 1.15}px system-ui, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, x, y + 0.5);
-  }
-}
-
-function glyphFlag(ctx, x, y, s) {
-  ctx.strokeStyle = '#20303c';
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(x, y + s); ctx.lineTo(x, y - s); ctx.stroke();
-  const cell = s / 2;
-  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
-    ctx.fillStyle = (i + j) % 2 ? '#20303c' : '#ffffff';
-    ctx.fillRect(x + i * cell, y - s + j * cell, cell, cell);
-  }
-}
-
-function glyphAnchor(ctx, x, y, s) {
-  ctx.strokeStyle = '#20506e';
-  ctx.lineWidth = 2.2;
-  ctx.beginPath(); ctx.arc(x, y - s * 0.55, s * 0.28, 0, 7); ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x, y - s * 0.3); ctx.lineTo(x, y + s * 0.7);
-  ctx.moveTo(x - s * 0.6, y + s * 0.1); ctx.lineTo(x + s * 0.6, y + s * 0.1);
-  ctx.moveTo(x - s * 0.6, y + s * 0.1); ctx.lineTo(x - s * 0.45, y + s * 0.65);
-  ctx.moveTo(x + s * 0.6, y + s * 0.1); ctx.lineTo(x + s * 0.45, y + s * 0.65);
-  ctx.stroke();
-}
-
-function glyphLighthouse(ctx, x, y, s) {
-  ctx.fillStyle = '#f4f1e8';
-  ctx.beginPath();
-  ctx.moveTo(x - s * 0.4, y + s);
-  ctx.lineTo(x - s * 0.25, y - s * 0.6);
-  ctx.lineTo(x + s * 0.25, y - s * 0.6);
-  ctx.lineTo(x + s * 0.4, y + s);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#c23b2e';
-  ctx.fillRect(x - s * 0.32, y - s * 0.05, s * 0.64, s * 0.3);
-  ctx.fillStyle = '#ffd23e';
-  ctx.beginPath(); ctx.arc(x, y - s * 0.78, s * 0.2, 0, 7); ctx.fill();
-}
-
-function glyphCross(ctx, x, y, s) {
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath(); ctx.arc(x, y, s * 0.95, 0, 7); ctx.fill();
-  ctx.strokeStyle = 'rgba(20,26,34,0.5)'; ctx.lineWidth = 1.2; ctx.stroke();
-  ctx.fillStyle = '#d8402e';
-  ctx.fillRect(x - s * 0.18, y - s * 0.55, s * 0.36, s * 1.1);
-  ctx.fillRect(x - s * 0.55, y - s * 0.18, s * 1.1, s * 0.36);
-}
-
-function glyphShield(ctx, x, y, s) {
-  ctx.fillStyle = '#274b63';
-  ctx.beginPath();
-  ctx.moveTo(x, y - s);
-  ctx.lineTo(x + s * 0.8, y - s * 0.55);
-  ctx.lineTo(x + s * 0.8, y + s * 0.2);
-  ctx.quadraticCurveTo(x + s * 0.8, y + s * 0.8, x, y + s);
-  ctx.quadraticCurveTo(x - s * 0.8, y + s * 0.8, x - s * 0.8, y + s * 0.2);
-  ctx.lineTo(x - s * 0.8, y - s * 0.55);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#ffd23e';
-  ctx.font = `bold ${s}px system-ui, sans-serif`;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('P', x, y);
 }
 
 export function drawBigMap() {
-  if (!_bigCtx) return;
-  const ctx = _bigCtx;
-  const W = _big.width, H = _big.height;
-  const B = CITY_BOUNDS;
-  const pad = 26;
-  const scale = Math.min((W - pad * 2) / (B.maxX - B.minX + 60), (H - pad * 2) / (B.maxZ - B.minZ));
-  const ox = pad + 30 * scale, oy = pad;
-  const toMap = (x, z) => [ox + (x - B.minX) * scale, oy + (z - B.minZ) * scale];
-  ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#1d2733';
-  ctx.fillRect(0, 0, W, H);
-  paintBase(ctx, toMap, { scale });
-
-  // District labels, once each, centred on their rectangles.
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  for (const d of DISTRICTS) {
-    const [x, y] = toMap((d.minX + d.maxX) / 2, (d.minZ + d.maxZ) / 2);
-    ctx.font = 'bold 15px system-ui, sans-serif';
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = 'rgba(24,30,40,0.75)';
-    const label = d.name.toUpperCase();
-    ctx.strokeText(label, x, y);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(label, x, y);
+  if (!bigCtx || !staticLayer) return;
+  const g = bigCtx;
+  const w = bigCanvas.width;
+  const h = bigCanvas.height;
+  g.clearRect(0, 0, w, h);
+  const k = Math.min(w / staticLayer.width, h / staticLayer.height);
+  const dw = staticLayer.width * k;
+  const dh = staticLayer.height * k;
+  const ox = (w - dw) / 2;
+  const oy = (h - dh) / 2;
+  g.drawImage(staticLayer, ox, oy, dw, dh);
+  const toMap = (x, z) => [ox + X(x) * k, oy + Z(z) * k];
+  drawRoute(g, toMap, 3.4);
+  drawGlyphs(g, toMap, 1);
+  drawPolice(g, toMap, 1);
+  const p = G.player;
+  if (p) {
+    const [px, py] = toMap(p.x, p.z);
+    const pulse = 1 + Math.sin(G.elapsed * 4) * 0.15;
+    drawPlayerArrow(g, px, py, p.car ? p.car.heading : p.heading, pulse);
   }
-
-  // Route and its distance pill.
-  const route = currentRoute();
-  if (route) {
-    ctx.strokeStyle = '#ffb340';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([8, 5]);
-    ctx.beginPath();
-    route.points.forEach((p, i) => {
-      const [x, y] = toMap(p.x, p.z);
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-    ctx.setLineDash([]);
-    const end = route.points[route.points.length - 1];
-    const [ex, ey] = toMap(end.x, end.z);
-    const label = `${route.dist} m`;
-    ctx.font = 'bold 13px system-ui, sans-serif';
-    const tw = ctx.measureText(label).width + 16;
-    ctx.fillStyle = '#141a22';
-    ctx.beginPath();
-    ctx.roundRect(ex - tw / 2, ey + 12, tw, 22, 11);
-    ctx.fill();
-    ctx.fillStyle = '#ffd98a';
-    ctx.fillText(label, ex, ey + 23.5);
-    drawObjective(ctx, ex, ey, 1.1);
-  }
-
-  // POI glyphs from real PLACES.
-  const P = PLACES;
-  const at = (p) => toMap(p.x, p.z);
-  let [x, y] = at(P.marisol);
-  glyphCircle(ctx, x, y, 9, '#e8a33c', 'M', '#3a2a05');
-  [x, y] = at(P.raceStart);
-  glyphFlag(ctx, x, y, 10);
-  [x, y] = at(P.marina);
-  glyphAnchor(ctx, x, y, 10);
-  [x, y] = at(P.lighthouse);
-  glyphLighthouse(ctx, x, y, 10);
-  [x, y] = at(P.garage);
-  glyphCircle(ctx, x, y, 9, '#5a6a76', 'G');
-  [x, y] = at(P.papd);
-  glyphShield(ctx, x, y, 10);
-  [x, y] = at(P.hospital);
-  glyphCross(ctx, x, y, 10);
-  [x, y] = at(P.clockTower);
-  glyphCircle(ctx, x, y, 7, '#e8d9b0', '◷', '#4a3b28');
-
-  // Police dots and the player.
-  for (const c of G.cars) {
-    if (c.typeKey !== 'cruiser' || c.dead) continue;
-    const [cx2, cy2] = toMap(c.x, c.z);
-    ctx.fillStyle = '#e0482e';
-    ctx.beginPath(); ctx.arc(cx2, cy2, 4, 0, 7); ctx.fill();
-  }
-  if (G.player) {
-    const [px2, py2] = toMap(G.player.x, G.player.z);
-    drawPlayerArrow(ctx, px2, py2, G.player.heading, 1.15);
-  }
-
   // Compass rose.
-  const cxr = W - 44, cyr = 44;
-  ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-  ctx.lineWidth = 1.4;
-  ctx.beginPath(); ctx.arc(cxr, cyr, 17, 0, 7); ctx.stroke();
-  ctx.fillStyle = '#ffb340';
-  ctx.beginPath();
-  ctx.moveTo(cxr, cyr - 14); ctx.lineTo(cxr + 4.4, cyr + 2); ctx.lineTo(cxr - 4.4, cyr + 2);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 10px system-ui, sans-serif';
-  ctx.fillText('N', cxr, cyr - 24);
-
-  // Header district: where the route is taking you.
-  const headEl = document.getElementById('bigmap-district');
-  if (headEl) {
-    const obj = objectivePoint();
-    headEl.textContent = obj ? districtAt(obj.x, obj.z).name.toUpperCase() : (G.district || 'PUERTO ALBA').toUpperCase();
+  const cx = w - 44;
+  const cy = 44;
+  g.beginPath();
+  g.arc(cx, cy, 26, 0, Math.PI * 2);
+  g.fillStyle = 'rgba(10,16,24,0.72)';
+  g.fill();
+  g.strokeStyle = 'rgba(255,255,255,0.5)';
+  g.stroke();
+  g.fillStyle = '#ffb340';
+  g.beginPath();
+  g.moveTo(cx, cy - 17);
+  g.lineTo(cx + 5, cy + 2);
+  g.lineTo(cx - 5, cy + 2);
+  g.closePath();
+  g.fill();
+  g.fillStyle = '#f4f6f6';
+  g.font = '700 12px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.fillText('N', cx, cy + 15);
+  // Route distance pill, riding just above the objective diamond.
+  const r = currentRoute();
+  const obj = objectivePoint();
+  if (r && r.pts && obj) {
+    const label = `${Math.round(r.dist)} m`;
+    g.font = '700 15px system-ui, sans-serif';
+    const tw = g.measureText(label).width + 22;
+    const [cx, cy] = toMap(obj.x, obj.z);
+    const px = cx - tw / 2;
+    const py = cy - 40;
+    g.fillStyle = 'rgba(10,16,24,0.85)';
+    g.beginPath();
+    g.roundRect(px, py, tw, 24, 12);
+    g.fill();
+    g.strokeStyle = '#ffb340';
+    g.lineWidth = 1.4;
+    g.stroke();
+    g.fillStyle = '#ffedc2';
+    g.textAlign = 'center';
+    g.fillText(label, px + tw / 2, py + 16.5);
   }
+  void ox;
+  void dw;
+  void dh;
 }

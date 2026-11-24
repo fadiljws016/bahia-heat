@@ -1,38 +1,47 @@
-// input.js — keyboard and mouse state. `keys` is level-triggered,
-// `pressed` is edge-triggered for the current frame (endFrame clears it),
-// mouse movement feeds the camera yaw/pitch while the pointer is locked.
+// input.js — keyboard + mouse state. Modules poll the `input` object;
+// one-shot actions (interact, map, dialogue advance) read edge flags that
+// endFrame() clears at the end of each tick.
 
 export const input = {
   keys: {},
-  pressed: {},
-  yaw: 0,
-  pitch: 0.24,
-  mouseDown: false,
-  mouseX: 0,
-  mouseY: 0,
+  forward: 0,
+  strafe: 0,
+  sprint: false,
+  mouseDX: 0,
+  mouseDY: 0,
+  firing: false,
+  clicked: false, // left button pressed this frame
+  interact: false, // E pressed this frame
+  mapToggle: false, // M pressed this frame
+  advance: false, // E / click during dialogue
+  pause: false,
   locked: false,
 };
 
-let _canvas = null;
+const EDGE = { KeyE: 'interact', KeyM: 'mapToggle', Escape: 'pause' };
 
 export function initInput(canvas) {
-  _canvas = canvas;
-  window.addEventListener('keydown', (e) => {
-    if (!input.keys[e.code]) input.pressed[e.code] = true;
-    input.keys[e.code] = true;
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+  window.addEventListener('keydown', (ev) => {
+    if (ev.repeat) return;
+    input.keys[ev.code] = true;
+    if (EDGE[ev.code]) input[EDGE[ev.code]] = true;
+    if (ev.code === 'KeyE' || ev.code === 'Space') input.advance = true;
   });
-  window.addEventListener('keyup', (e) => { input.keys[e.code] = false; });
-  window.addEventListener('blur', () => { input.keys = {}; input.mouseDown = false; });
-  canvas.addEventListener('mousedown', (e) => { if (e.button === 0) input.mouseDown = true; });
-  window.addEventListener('mouseup', (e) => { if (e.button === 0) input.mouseDown = false; });
-  canvas.addEventListener('mousemove', (e) => {
-    input.mouseX = e.clientX;
-    input.mouseY = e.clientY;
-    if (input.locked) {
-      input.yaw -= (e.movementX || 0) * 0.0026;
-      input.pitch += (e.movementY || 0) * 0.0022;
+  window.addEventListener('keyup', (ev) => { input.keys[ev.code] = false; });
+  window.addEventListener('mousemove', (ev) => {
+    if (!input.locked) return;
+    input.mouseDX += ev.movementX || 0;
+    input.mouseDY += ev.movementY || 0;
+  });
+  window.addEventListener('mousedown', (ev) => {
+    if (ev.button === 0) {
+      input.firing = true;
+      input.clicked = true;
+      input.advance = true;
     }
+  });
+  window.addEventListener('mouseup', (ev) => {
+    if (ev.button === 0) input.firing = false;
   });
   document.addEventListener('pointerlockchange', () => {
     input.locked = document.pointerLockElement === canvas;
@@ -40,10 +49,19 @@ export function initInput(canvas) {
 }
 
 export function requestLock(canvas) {
-  const target = canvas || _canvas;
-  if (target && target.requestPointerLock) target.requestPointerLock();
+  if (canvas && canvas.requestPointerLock) canvas.requestPointerLock();
 }
 
 export function endFrame() {
-  input.pressed = {};
+  const k = input.keys;
+  input.forward = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0);
+  input.strafe = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0);
+  input.sprint = !!k.ShiftLeft || !!k.ShiftRight;
+  input.mouseDX = 0;
+  input.mouseDY = 0;
+  input.clicked = false;
+  input.interact = false;
+  input.mapToggle = false;
+  input.advance = false;
+  input.pause = false;
 }

@@ -1,346 +1,276 @@
-// shots.js — the four staged screenshot scenes: cover, drive (map), chase,
-// combat. Each one rebuilds the world state from scratch — actors cleared,
-// progression set, camera locked — so a capture is a deterministic frame
-// of the real game, never a diorama pasted on top of it.
+// shots.js — the film sets. Four staged scenes (cover, drive, chase,
+// combat) built from the same systems the live game uses: real staging
+// values, real officers, real cars, the real colonnade. The camera seats
+// and every offset are locked — the approved frames were composed with
+// exactly these numbers.
 
 import { G } from './state.js';
-import { makeRng, randRange } from './util.js';
-import { stageCamera } from './camera.js';
-import { spawnPlayer } from './player.js';
-import { spawnPedAt, posePed, removePed } from './pedestrians.js';
-import { posePerson, showWeapon } from './people.js';
-import { spawnOfficerAt, removeOfficer, officerShoot } from './officers.js';
-import { buildRoadblockMeshes } from './police.js';
-import { createCar, removeCar } from './vehicles.js';
-import { setHeliAltitude, setHeliOrbit } from './helicopter.js';
-import { gunshotFx, burst } from './effects.js';
-import { PLACES, BOULEVARD_X, facadeTexture } from './city.js';
+import { BOULEVARD_X, PLACES, facadeTexture } from './city.js';
 import { MISSIONS } from './story.js';
-import { rankFor } from './state.js';
+import { spawnPlayer, putPlayerInCar } from './player.js';
+import { spawnPedAt, removePed, hurtPed, crowd } from './pedestrians.js';
+import { spawnOfficerAt, removeOfficer } from './officers.js';
+import { createCar, removeCar, syncCarMesh } from './vehicles.js';
+import { buildRoadblockMeshes } from './police.js';
+import { setHeliAltitude, setHeliOrbit } from './helicopter.js';
+import { stageCamera } from './camera.js';
+import { posePerson, showWeapon } from './people.js';
+import { gunshotFx } from './effects.js';
 
-let _staged = null; // per-scene handles updateShotScene animates
+const staged = { ally: null, officers: [], foe: null };
 
-function clearActors() {
-  for (const car of [...G.cars]) removeCar(car);
-  for (const ped of [...G.peds]) removePed(ped);
-  for (const off of [...G.officers]) removeOfficer(off);
+function clearStage() {
+  for (let i = G.cars.length - 1; i >= 0; i -= 1) removeCar(G.cars[i]);
+  for (let i = G.peds.length - 1; i >= 0; i -= 1) removePed(G.peds[i]);
+  for (let i = G.officers.length - 1; i >= 0; i -= 1) removeOfficer(G.officers[i]);
   G.roadblock = null;
+  staged.ally = null;
+  staged.officers = [];
+  staged.foe = null;
 }
 
-function resetState() {
-  G.wanted = 0;
-  G.wantedFloor = 0;
-  G.dialogue = null;
-  G.mapOpen = false;
-  G.heliSeesPlayer = false;
-  G.health = 100;
-  G.armor = 0;
-  G.over = false;
-  G.busted = false;
+function fakeMission(mi, si, timerLeft = null) {
+  G.mission = {
+    def: MISSIONS[mi], stageIndex: si, state: 'active',
+    timerLeft, stageT: 0, raceIndex: 0, fareIndex: 0, killsLeft: 0, targetCar: null,
+  };
 }
 
-function fakeMission(index, stage) {
-  G.mission = { index, stage, timerLeft: null, active: true, checkpoint: 0, kills: 0, targetPed: null };
-}
-
-function setProgression(cash, respect, unlocked, ammo, weapon) {
-  G.cash = cash;
-  G.respect = respect;
-  G.rankIndex = rankFor(respect).index;
-  G.unlocked = unlocked;
-  G.ammo = ammo;
-  G.weapon = weapon;
-}
-
-function place(ped, heading, pose, phase = 0) {
-  ped.heading = heading;
-  ped.mesh.position.set(ped.x, 0, ped.z);
-  ped.mesh.rotation.y = heading;
-  posePed(ped, pose, phase);
-  return ped;
-}
-
-function crowd(x, z, n, seed, modes = ['walk', 'idle']) {
-  const rng = makeRng(seed * 977 + 13);
-  const made = [];
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2 + rng() * 0.7;
-    const r = 1.6 + rng() * 3.4;
-    const ped = spawnPedAt(x + Math.cos(a) * r, z + Math.sin(a) * r, 'stand', { seed: seed * 100 + i, staged: true });
-    const mode = modes[i % modes.length];
-    const heading = rng() * Math.PI * 2;
-    place(ped, heading, mode === 'walk' ? 'walk' : mode === 'chat' ? 'chat' : 'stand', rng() * 6);
-    made.push(ped);
-  }
-  return made;
-}
-
-function trafficCar(type, x, z, heading, color, speed = 0) {
-  const car = createCar(type, x, z, heading, color, makeRng(x * 31 + z));
-  car.driver = 'traffic';
-  car.speed = speed;
-  return car;
-}
-
-function parkedCar(type, x, z, heading, color) {
-  const car = createCar(type, x, z, heading, color, makeRng(x * 17 + z));
+function trafficCar(type, x, z, heading, color) {
+  const car = createCar(type, x, z, heading, color, Math.random);
   car.parked = true;
+  syncCarMesh(car, 0);
   return car;
 }
 
-// A window-textured backdrop slab: in-frame architecture behind a staged
-// seat, dense regardless of where the generated city put its blocks.
-function placeBackdrop(x, z, w, h, ry, tint, winScale = 6) {
-  const tex = facadeTexture(2, false);
-  const geo = new THREE.BoxGeometry(w, h, 5);
-  const uv = geo.attributes.uv;
-  const faceW = [5, 5, w, w, w, 5];
-  for (let f = 0; f < 6; f++) {
-    for (let v = 0; v < 4; v++) {
-      const i = f * 4 + v;
-      uv.setXY(i, uv.getX(i) * (faceW[f] / winScale), uv.getY(i) * (h / winScale));
-    }
-  }
+/** A window-textured backdrop slab: guaranteed architecture in frame. */
+function backdrop(x, z, w, h, tint, variant, rotY = 0, dense = false) {
+  const tex = facadeTexture(variant);
+  tex.repeat.set(Math.max(1, Math.round(w / (dense ? 6 : 12))), Math.max(1, Math.round(h / (dense ? 6 : 12))));
   const mat = new THREE.MeshLambertMaterial({ map: tex, color: tint });
-  const m = new THREE.Mesh(geo, mat);
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 1.2), mat);
   m.position.set(x, h / 2, z);
-  m.rotation.y = ry;
-  m.castShadow = true;
+  m.rotation.y = rotY;
   G.scene.add(m);
   return m;
 }
 
-function addCrates(x, z, n) {
-  const mat = new THREE.MeshLambertMaterial({ color: 0xb08954 });
-  const edge = new THREE.MeshLambertMaterial({ color: 0x8a6a44 });
-  for (let i = 0; i < n; i++) {
-    const c = new THREE.Mesh(new THREE.BoxGeometry(1.15, 1.15, 1.15), i % 2 ? mat : edge);
-    c.position.set(x + (i === 2 ? 0.3 : 0), 0.58 + Math.floor(i / 2) * 1.16, z + (i === 2 ? 0.2 : 0));
-    c.rotation.y = i * 0.24;
-    c.castShadow = true;
-    G.scene.add(c);
+/** The corner house's staged balconies fold away for the combat frame. */
+export function collapseStagedBalconies() {
+  const group = G.cityMeshes;
+  if (!group || !group.userData.balconies) return;
+  for (const bm of group.userData.balconies) {
+    const b = bm.userData.building;
+    if (b && b.face === 'S' && b.name === 'CORNER') bm.position.y = -60;
   }
 }
-
-// The corner house's balcony boards come down for the staged fight, the
-// way the owner ordered: scene and positions otherwise untouched.
-function collapseStagedBalconies(at) {
-  if (!G.city) return;
-  for (const b of G.city.buildings) {
-    if (!b.balconyMeshes) continue;
-    if (Math.abs(b.x - at.x) > 34 || Math.abs(b.z - at.z) > 34) continue;
-    for (const m of b.balconyMeshes) m.visible = false;
-  }
-}
-
-// ---------------------------------------------------------------------------
 
 function stageCover() {
   G.timeHours = 17.55;
-  setProgression(250, 40,
-    { fists: true, pistol: true, smg: false, shotgun: false },
-    { pistol: 60, smg: 0, shotgun: 0 }, 'pistol');
-  const player = spawnPlayer(-191.9, -5.0);
-  player.heading = -2.53;
-  player.pose = 'chat';
-  showWeapon(player.mesh, 'pistol', 'hip');
-
-  const marisol = spawnPedAt(-193.5, -7.3, 'stand', { name: 'marisol', color: 0xd8402e, dress: true, staged: true, seed: 777 });
-  place(marisol, 0.61, 'chat', 0.2);
-
-  const pair = (x1, z1, x2, z2, s) => {
-    const a = spawnPedAt(x1, z1, 'stand', { staged: true, seed: s });
-    const b = spawnPedAt(x2, z2, 'stand', { staged: true, seed: s + 1 });
-    place(a, Math.atan2(x2 - x1, z2 - z1), 'chat', 0.4);
-    place(b, Math.atan2(x1 - x2, z1 - z2), 'chat', 1.7);
+  G.cash = 250;
+  G.respect = 40;
+  G.wanted = 0;
+  G.weapons.unlocked = { fists: true, pistol: true, smg: false, shotgun: false };
+  G.weapons.ammo = { pistol: 60, smg: 0, shotgun: 0 };
+  G.weapons.current = 'pistol';
+  const p = spawnPlayer(-191.9, -5.0);
+  p.heading = -2.53;
+  p.mesh.rotation.y = -2.53;
+  posePerson(p.mesh, 'chat', 1.1);
+  showWeapon(p.mesh, 'pistol', 'hip');
+  const marisol = spawnPedAt(-193.5, -7.3, 'stand', { name: 'marisol', color: 0xd8402e, heading: 0.61, pose: 'chat', phase: 0.2 });
+  marisol.heading = 0.61;
+  const pair = (x1, z1, x2, z2, seed) => {
+    const a = spawnPedAt(x1, z1, 'stand', { pose: 'chat', seed, phase: seed });
+    const b = spawnPedAt(x2, z2, 'stand', { pose: 'chat', seed: seed + 40, phase: seed + 1 });
+    a.heading = Math.atan2(b.x - a.x, b.z - a.z);
+    b.heading = Math.atan2(a.x - b.x, a.z - b.z);
   };
-  pair(-190.2, -3.2, -190.2, -1.6, 810);
-  pair(-189.5, -6.5, -189.5, -4.9, 820);
-  place(spawnPedAt(-190.6, -11.5, 'stand', { staged: true, seed: 830 }), Math.PI / 2, 'stand', 0);
-  place(spawnPedAt(-189.6, -2.5, 'stand', { staged: true, seed: 831 }), Math.PI / 2, 'stand', 0);
-  place(spawnPedAt(-192.5, -14.5, 'stand', { staged: true, seed: 832 }), 2.6, 'walk', 1.2);
-  place(spawnPedAt(-196, -15, 'stand', { staged: true, seed: 833 }), 2.2, 'walk', 3.4);
-  place(spawnPedAt(-200.3, -20, 'stand', { staged: true, seed: 834 }), -Math.PI / 2, 'sit', 0);
-  // A bench for the sitter.
-  const bench = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 0.55),
-    new THREE.MeshLambertMaterial({ color: 0x8a6a44 }));
-  bench.position.set(-200.3, 0.45, -20.4);
-  G.scene.add(bench);
-
+  pair(-190.2, -3.2, -190.2, -1.6, 3);
+  pair(-189.5, -6.5, -189.5, -4.9, 7);
+  spawnPedAt(-190.6, -11.5, 'stand', { heading: Math.PI / 2, pose: 'idle', seed: 11 });
+  spawnPedAt(-189.6, -2.5, 'stand', { heading: Math.PI / 2, pose: 'idle', seed: 12 });
+  spawnPedAt(-192.5, -14.5, 'stand', { heading: 2.6, pose: 'idle', seed: 13 });
+  spawnPedAt(-196, -15, 'stand', { heading: 2.2, pose: 'idle', seed: 14 });
+  spawnPedAt(-200.3, -20, 'sit', { heading: -Math.PI / 2, pose: 'sit', seed: 15 });
+  // Crowds further down the promenade.
   crowd(-196, 10, 6, 11);
   crowd(-188, 26, 4, 13, ['walk', 'idle']);
   trafficCar('sedan', BOULEVARD_X - 3.5, 48, Math.PI, 0xe8e3d5);
   trafficCar('taxi', BOULEVARD_X + 3.5, -34, 0, undefined);
   trafficCar('sport', BOULEVARD_X - 3.5, -58, Math.PI, 0xffcf3f);
-  parkedCar('sedan', -222.6, 14, 0, 0x8a9db5);
-  parkedCar('truck', -201.4, 34, Math.PI, undefined);
-
+  trafficCar('sedan', -222.6, 14, 0, 0x8a9db5);
+  trafficCar('truck', -201.4, 34, Math.PI, undefined);
   fakeMission(0, 0);
   G.dialogue = { lines: MISSIONS[0].intro, index: 1, onDone: null };
   stageCamera(-195.9, 1.55, -3.1, -192.9, 1.2, -6.1);
-  _staged = { player, kind: 'cover' };
 }
 
 function stageDrive() {
   G.timeHours = 17.3;
-  setProgression(1450, 640,
-    { fists: true, pistol: true, smg: true, shotgun: false },
-    { pistol: 42, smg: 80, shotgun: 0 }, 'pistol');
-  G.rankIndex = 3;
-  const player = spawnPlayer(140, -36.5);
-  const car = createCar('sport', 140, -36.5, Math.PI / 2, 0xff5347, makeRng(4));
-  car.driver = 'player';
-  car.speed = 15;
-  player.car = car;
-  player.mesh.visible = false;
-
-  trafficCar('sedan', 172, -36.5, Math.PI / 2, 0xe8e3d5, 9);
-  trafficCar('taxi', 104, -43.5, Math.PI / 2, undefined, 8);
-  trafficCar('truck', 143.5, 8, Math.PI, undefined, 0);
-  trafficCar('sedan', 96, -36.5, Math.PI / 2, 0x35b06f, 9);
+  G.cash = 1450;
+  G.respect = 640;
+  G.wanted = 0;
+  G.weapons.unlocked = { fists: true, pistol: true, smg: true, shotgun: false };
+  G.weapons.ammo = { pistol: 42, smg: 80, shotgun: 0 };
+  G.weapons.current = 'pistol';
+  spawnPlayer(140, -36.5);
+  const car = putPlayerInCar('sport', 140, -36.5, Math.PI / 2, 0xff5347);
+  if (car) car.speed = 15;
+  trafficCar('sedan', 172, -36.5, Math.PI / 2, 0xe8e3d5);
+  trafficCar('taxi', 104, -43.5, Math.PI / 2, undefined);
+  trafficCar('truck', 143.5, 8, Math.PI, undefined);
+  trafficCar('sedan', 96, -36.5, Math.PI / 2, 0x35b06f);
   crowd(126, -22, 5, 23);
   crowd(168, -52, 4, 29);
-
-  fakeMission(1, 2);
-  G.mission.timerLeft = 87;
+  fakeMission(1, 2, 87);
   G.mapOpen = true;
   stageCamera(128, 4.2, -36.5, 152, 1.1, -36.5);
-  _staged = { player, kind: 'drive' };
 }
 
 function stageChase() {
   G.timeHours = 19.05;
-  setProgression(2320, 905,
-    { fists: true, pistol: true, smg: true, shotgun: true },
-    { pistol: 31, smg: 55, shotgun: 12 }, 'shotgun');
-  const player = spawnPlayer(BOULEVARD_X + 3.5, 16);
-  const car = createCar('sedan', BOULEVARD_X + 3.5, 16, Math.PI, 0xe8e3d5, makeRng(6));
-  car.driver = 'player';
-  car.speed = 23;
-  player.car = car;
-  player.mesh.visible = false;
-
+  G.cash = 2320;
+  G.respect = 905;
+  G.weapons.unlocked = { fists: true, pistol: true, smg: true, shotgun: true };
+  G.weapons.ammo = { pistol: 31, smg: 55, shotgun: 12 };
+  G.weapons.current = 'shotgun';
+  const px = BOULEVARD_X + 3.5;
+  spawnPlayer(px, 16);
+  const car = putPlayerInCar('sedan', px, 16, Math.PI, 0xd8402e);
+  if (car) car.speed = 23;
   const rb = buildRoadblockMeshes();
-  const o1 = spawnOfficerAt(rb.x - 2.2, rb.z + 2.8, { phase: 'crouch', roadblock: rb, homeCar: rb.cars[0], staged: true });
-  const o2 = spawnOfficerAt(rb.x + 5.4, rb.z + 2.8, { phase: 'fire', roadblock: rb, homeCar: rb.cars[0], staged: true });
-  o1.heading = 0; o2.heading = 0;
-  o1.mesh.rotation.y = 0; o2.mesh.rotation.y = 0;
-
-  trafficCar('sedan', BOULEVARD_X + 3.5, 8, Math.PI, 0xe8e3d5, 3);
-  trafficCar('taxi', BOULEVARD_X - 3.5, 10, 0, undefined, 11);
-  // Pursuit cruisers right on the player's tail, filling the frame's
-  // foreground corners the way a real chase shot breathes.
-  const tail1 = trafficCar('cruiser', BOULEVARD_X - 2.5, 29, Math.PI, 0xf2f2f2, 21);
-  const tail2 = trafficCar('cruiser', BOULEVARD_X + 8.5, 31, Math.PI, 0xf2f2f2, 21);
-  tail1.driver = 'police'; tail2.driver = 'police';
-  tail1.unit = 865; tail2.unit = 866;
-
+  // The pursuit sandwich: two Interceptors fill the foreground, close
+  // enough that dispatch reads them at arm's length.
+  const hunt1 = createCar('cruiser', BOULEVARD_X - 2.0, 26.5, Math.PI + 0.1, undefined, Math.random);
+  hunt1.police = true;
+  hunt1.unitNo = 168;
+  hunt1.role = 'FLANK';
+  const hunt2 = createCar('cruiser', BOULEVARD_X + 10, 27, Math.PI - 0.08, undefined, Math.random);
+  hunt2.police = true;
+  hunt2.unitNo = 166;
+  hunt2.role = 'RAM';
+  for (const rc of rb.cars) { rc.police = true; rc.unitNo = 167; rc.role = 'BLOCK'; }
+  for (const off of G.officers) {
+    if (off.roadblock === rb) off.heading = Math.atan2(px - off.x, 16 - off.z);
+  }
+  trafficCar('sedan', BOULEVARD_X + 3.5, 8, Math.PI, 0xe8e3d5);
+  trafficCar('taxi', BOULEVARD_X - 3.5, 10, 0, undefined);
   G.wanted = 4.4;
   G.heliSeesPlayer = true;
   setHeliAltitude(22);
   setHeliOrbit(-3.53);
   fakeMission(2, 1);
-  placeBackdrop(-238, -34, 20, 30, 0.2, 0xf2c184);
-  placeBackdrop(-186, -58, 22, 24, -0.15, 0xef9f7d);
+  // Set backdrop: a wall of lit facades behind the roadblock.
+  backdrop(BOULEVARD_X - 26, -46, 20, 15, 0xe8b48c, 1);
+  backdrop(BOULEVARD_X - 3, -47, 22, 19, 0xd8c9a8, 3);
+  backdrop(BOULEVARD_X + 22, -46, 20, 13, 0xcbb79a, 5);
   stageCamera(BOULEVARD_X + 6.5, 3.8, 36.5, BOULEVARD_X + 2.5, 1.0, -4);
-  _staged = { player, kind: 'chase', officers: [o1, o2] };
 }
 
 function stageCombat() {
-  G.timeHours = 18.25;
-  setProgression(1980, 780,
-    { fists: true, pistol: true, smg: true, shotgun: true },
-    { pistol: 26, smg: 64, shotgun: 7 }, 'shotgun');
-  G.rankIndex = 3;
   const at = PLACES.alleyShootout;
-  const player = spawnPlayer(at.x - 5.6, at.z - 5.4);
-  player.heading = 0.62;
-  player.pose = 'aim';
-  showWeapon(player.mesh, 'shotgun', 'hand');
-
-  const propCar = parkedCar('sedan', at.x - 2.5, at.z + 3.2, 0.4, 0x57a8d8);
-  const copCar = parkedCar('cruiser', at.x + 3.5, at.z + 5.5, -0.9, 0xf2f2f2);
-
-  const ally = spawnPedAt(player.x + 2.9, player.z - 1.2, 'stand', { staged: true, seed: 950, outfit: { shirt: 0xd8402e } });
-  ally.name = 'ally';
-  showWeapon(ally.mesh, 'smg', 'hand');
-
-  const mk = (x, z, phase) => spawnOfficerAt(x, z, { phase, homeCar: copCar, staged: true });
-  const offOpen = mk(at.x - 0.8, at.z + 1.8, 'fire');
-  const offRoof = mk(at.x - 3.6, at.z + 13.6, 'fire');
-  const offFlank = mk(at.x - 7.2, at.z + 7.8, 'fire');
-  const downOff = mk(at.x - 7.0, at.z - 2.2, 'crouch');
-  const offCiv = mk(at.x + 4.4, at.z - 5.0, 'fire');
-  const face = (off, t) => { off.heading = Math.atan2(t.x - off.x, t.z - off.z); off.mesh.rotation.y = off.heading; off.target = t; };
-  face(offOpen, ally); face(offRoof, ally); face(offFlank, player); face(offCiv, ally);
-  downOff.down = true;
-  posePerson(downOff.mesh, 'down', 0);
-  downOff.mesh.position.set(downOff.x, downOff.mesh.userData.yOff || 0, downOff.z);
-  place(ally, Math.atan2(offOpen.x - ally.x, offOpen.z - ally.z), 'aim', 0);
-
-  const hostile = spawnPedAt(at.x + 2, at.z + 7, 'stand', { staged: true, seed: 960, outfit: { shirt: 0xd8402e } });
-  hostile.down = true;
-  place(hostile, 2.4, 'down', 0);
-  const civilian = spawnPedAt(at.x + 5.2, at.z - 5.6, 'stand', { staged: true, seed: 961 });
-  place(civilian, -1.8, 'surrender', 0);
-
-  addCrates(at.x + 6.8, at.z - 3.8, 3);
-  addCrates(at.x - 1.5, at.z + 6.5, 2);
-  collapseStagedBalconies(at);
-  placeBackdrop(at.x + 17, at.z + 15, 24, 20, -2.25, 0xd87a4e);
-  placeBackdrop(at.x + 9, at.z + 25, 26, 23, -2.6, 0xdfa55e);
-  placeBackdrop(at.x + 22, at.z + 1, 20, 16, -1.9, 0x7fa8c9);
-
+  G.timeHours = 18.25;
+  G.cash = 1980;
+  G.respect = 780;
   G.wanted = 2.2;
+  G.weapons.unlocked = { fists: true, pistol: true, smg: true, shotgun: true };
+  G.weapons.ammo = { pistol: 26, smg: 64, shotgun: 7 };
+  G.weapons.current = 'shotgun';
+  collapseStagedBalconies();
+  const p = spawnPlayer(at.x - 5.6, at.z - 5.4);
+  p.heading = 0.62;
+  p.mesh.rotation.y = 0.62;
+  posePerson(p.mesh, 'aim', 0);
+  showWeapon(p.mesh, 'shotgun', 'hand');
+  // The Red Sails ally, shoulder to shoulder with the player.
+  const ally = spawnPedAt(at.x - 3.9, at.z - 4.2, 'stand', { color: 0xd8402e, pose: 'aim', seed: 31 });
+  ally.heading = 0.9;
+  ally.mesh.rotation.y = 0.9;
+  posePerson(ally.mesh, 'aim', 0.3);
+  showWeapon(ally.mesh, 'pistol', 'hand');
+  staged.ally = ally;
+  // One hostile already down in the open.
+  const down = spawnPedAt(at.x + 6, at.z + 3, 'stand', { color: 0xd8402e, seed: 32 });
+  hurtPed(down, 500);
+  // The surrendering civilian by the crates.
+  const civ = spawnPedAt(at.x + 5.8, at.z - 5.8, 'stand', { pose: 'surrender', seed: 33 });
+  civ.heading = -2.2;
+  posePerson(civ.mesh, 'surrender', 0);
+  // Crates.
+  const crateMat = new THREE.MeshLambertMaterial({ color: 0x9a7648 });
+  const crate = (x, y, z) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.1, 1.1), crateMat);
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    G.scene.add(m);
+  };
+  crate(at.x + 6.6, 0.55, at.z - 4.4);
+  crate(at.x + 6.6, 1.65, at.z - 4.4);
+  crate(at.x + 7.8, 0.55, at.z - 4.6);
+  // The staged cruiser the officers belong to.
+  const copCar = trafficCar('cruiser', at.x + 2, at.z + 7, 2.6, undefined);
+  copCar.police = true;
+  copCar.unitNo = 166;
+  copCar.role = 'RAM';
+  const face = (o) => { o.heading = Math.atan2(ally.x - o.x, ally.z - o.z); o.foe = ally; };
+  const offOpen = spawnOfficerAt(at.x - 0.8, at.z + 1.8, { phase: 'fire', homeCar: copCar });
+  const offRoof = spawnOfficerAt(at.x - 3.6, at.z + 13.6, { phase: 'fire', homeCar: copCar });
+  const offFlank = spawnOfficerAt(at.x - 7.2, at.z + 7.8, { phase: 'fire', homeCar: copCar });
+  const downOff = spawnOfficerAt(at.x - 7.0, at.z - 2.2, { phase: 'crouch', homeCar: copCar });
+  const offCiv = spawnOfficerAt(at.x + 4.4, at.z - 5.0, { phase: 'fire', homeCar: copCar });
+  for (const o of [offOpen, offRoof, offFlank, offCiv]) face(o);
+  downOff.dead = true;
+  posePerson(downOff.mesh, 'down', 0);
+  staged.officers = [offOpen, offRoof, offFlank, offCiv];
+  staged.foe = ally;
   fakeMission(3, 2);
+  // Set backdrops behind the alley: dense windows, warm tints.
+  backdrop(at.x + 2, at.z + 27, 26, 16, 0xe8c9a0, 2, 0, true);
+  backdrop(at.x + 26, at.z + 8, 24, 13, 0xd8b490, 4, -Math.PI / 2, true);
   stageCamera(at.x - 9.5, 2.7, at.z - 8.5, at.x + 1.2, 1.0, at.z + 2.8);
-  _staged = { player, kind: 'combat', ally, officers: [offOpen, offRoof, offFlank, offCiv], copCar, propCar };
 }
 
 export function stageShotScene(name, seed = 1) {
-  G.shotMode = true;
-  G.shotName = name;
-  clearActors();
-  resetState();
-  _staged = null;
+  void seed;
+  clearStage();
+  G.shotMode = name;
+  G.mode = 'playing';
+  G.dialogue = null;
+  G.mapOpen = false;
+  G.messageT = 0;
   if (name === 'cover') stageCover();
   else if (name === 'drive') stageDrive();
   else if (name === 'chase') stageChase();
   else if (name === 'combat') stageCombat();
-  return _staged;
+  // One settle pass so every mesh sits exactly where staging put it.
+  for (const car of G.cars) syncCarMesh(car, 0);
 }
 
-// Per-frame staging direction: hold the poses, keep the gunfight alive in
-// the frames before the shutter, and signal readiness on schedule.
+/**
+ * Per-frame staging driver: the combat set runs a continuous volley from
+ * frame 10 so the shutter (frame ~90) always catches live tracers and a
+ * fresh muzzle flash — the approved frame is mid-exchange, not posed.
+ */
 export function updateShotScene(frame) {
-  if (!_staged) return frame > 30;
-  const s = _staged;
-  const p = s.player;
-  if (p && !p.car) {
-    p.mesh.position.set(p.x, 0, p.z);
-    p.mesh.rotation.y = p.heading;
-    if (s.kind === 'cover') posePerson(p.mesh, 'chat', 1.1 + frame * 0.03);
-    if (s.kind === 'combat') posePerson(p.mesh, frame >= 86 && frame <= 92 ? 'fire' : 'aim', frame * 0.1);
+  if (G.shotMode !== 'combat' || frame < 30) return;
+  const ally = staged.ally;
+  const p = G.player;
+  if (!ally || !p) return;
+  // A live-fire cadence, not a barrage: at the recipe's per-shot smoke
+  // counts, a shot every few frames keeps the air Wispy the way the
+  // approved frame reads — a shot every frame stacks into a cloud.
+  const officers = staged.officers.filter((o) => !o.dead);
+  if (frame % 5 === 0 && officers.length) {
+    const o = officers[Math.floor(frame / 5) % officers.length];
+    gunshotFx(o.x + Math.sin(o.heading) * 0.45, 1.28, o.z + Math.cos(o.heading) * 0.45, ally.x, 1.1, ally.z, 'pistol');
   }
-  if (s.kind === 'combat') {
-    // Continuous ragged fire from frame 25 on: one officer shoots every
-    // frame in rotation, the ally answers every third frame, so whatever
-    // frame the shutter lands on holds a live tracer and a fresh flash.
-    if (frame >= 25) {
-      for (const off of s.officers) officerShoot(off);
-      if (s.ally) {
-        const t = s.officers[frame % s.officers.length];
-        gunshotFx(s.ally.x + 0.3, 1.32, s.ally.z + 0.3, t.x, 1.1, t.z, { heading: s.ally.heading });
-      }
-      const t = s.officers[0];
-      gunshotFx(p.x + 0.4, 1.34, p.z + 0.3, t.x, 1.15, t.z, { heading: p.heading, muzzleScale: 1.25 });
-      if (frame % 13 === 7) burst(s.copCar.x, 1.0, s.copCar.z, 0xffcf7a, 5, 2.0, {});
-    }
-    return frame >= 60;
+  if (frame % 7 === 3 && officers.length) {
+    const o = officers[frame % officers.length];
+    gunshotFx(ally.x + Math.sin(ally.heading) * 0.45, 1.3, ally.z + Math.cos(ally.heading) * 0.45, o.x, 1.15, o.z, 'pistol');
   }
-  if (s.kind === 'chase') {
-    if (frame === 59 && s.officers) officerShoot(s.officers[1]);
-    return frame >= 60;
+  if (frame % 9 === 4 && officers.length) {
+    gunshotFx(p.x + Math.sin(p.heading) * 0.6, 1.32, p.z + Math.cos(p.heading) * 0.6,
+      officers[0].x, 1.1, officers[0].z, 'shotgun');
   }
-  return frame >= 45;
 }

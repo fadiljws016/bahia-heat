@@ -1,60 +1,43 @@
 # Bahia Heat
 
-[![gta6-01 bounty](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
-[![rank](https://make.fun/badge/gta6-01/fadiljws016/bahia-heat/rank.svg)](https://make.fun/bounty/gta6-01)
-[![reward](https://make.fun/badge/gta6-01/fadiljws016/bahia-heat/reward.svg)](https://make.fun/bounty/gta6-01)
+[![make.fun bounty](https://make.fun/badge/gta6-01.svg)](https://make.fun)
+[![rank](https://make.fun/badge/gta6-01/fadiljws016/bahia-heat/rank.svg)](https://make.fun)
+[![reward](https://make.fun/badge/gta6-01/fadiljws016/bahia-heat/reward.svg)](https://make.fun)
 
-An original open-world crime game set in **Puerto Alba**, a golden-hour port
-city of painted facades, marina arcades and six districts — Marina Alta,
-Las Palmas, Centro Alba, Viejo Puerto, El Faro and Playa Brava.
+An original open-world crime game set in **Puerto Alba**, a pastel port
+city where golden hour never quite ends. You run errands for Marisol
+"La Jefa" Quintana — fixer, smuggler, and the only honest broker on the
+bay — while the PAPD close in on foot, in Interceptors, and from the air
+with their FALCON-1 helicopter.
 
-You are the new driver for **Marisol "La Jefa" Quintana**, the fixer who runs
-the marina. Eight story jobs carry you from stealing your first sedan outside
-Bar La Ola to holding the docks in the Kingpin's Gambit: deliveries against
-the clock, a boulevard run under the FALCON-1 spotlight, the Palma alley
-showdown with the Red Sails, Tito's Street Crown street race, taxi fares, a
-takedown in Viejo Puerto — while the **PAPD** dispatch board tracks every
-unit on your tail, roadblocks close the boulevard, and a five-star wanted
-level decides how the city answers.
+Eight story jobs carry you from first wheels to the Kingpin's Gambit:
+steal, deliver, race, run fares, take down a courier and shake the heat,
+across six districts — Marina Alta, Las Palmas, Centro Alba, Viejo
+Puerto, El Faro and Playa Brava — with a full day cycle, a wanted
+system, purchasable garage cars, and a painted city map with real
+road-graph routing.
 
 ## Play
 
-Open `game/index.html` in a desktop browser (or serve the repo with
-`node serve.ts` and visit http://localhost:8080). Everything is static and
-offline; three.js is vendored under `game/vendor/`.
+Open `game/index.html` (or serve the `game/` folder statically). No
+network, no build step: the whole game is static files.
 
-| Input | Action |
-| --- | --- |
-| WASD / arrows | Move / drive |
-| Mouse | Orbit camera, aim |
-| Click | Shoot |
-| E | Enter or exit a car, talk, advance dialogue |
-| M | Full city map (Esc closes) |
-| 1–4 | Select weapon |
-| Shift | Run |
-| C | Change radio station |
-| N | Mute |
+## Controls
+
+- **WASD** — move / drive
+- **Mouse** — aim · **Click** — shoot
+- **E** — interact, talk, enter/exit cars
+- **M** — full city map · **ESC** — pause
+- **1–4** — weapon slots (Fists, P-9 Pistol, Kobra SMG, Muelle 12ga)
+- **Shift** — sprint
 
 ## The city
 
-- A surveyed road grid with a palm-lined boulevard, corner-kerb streetlights
-  and traffic that holds its lane; cars are solid — nothing ghosts through.
-- Painted canvas textures throughout: slab paving with wear and stains,
-  tar-seamed asphalt, grime-washed facades with shopfronts, and the teal
-  **MARINA ALTA** board on the marina colonnade.
-- A full day cycle graded ACES-filmic, with the sun, fog and sky repainted
-  from a nine-stop table; dusk brings out the lamps and FALCON-1's beam.
-- Five car types (Alba Sedan, Fuego GT, Taxi Alba, Mulo Truck, PAPD
-  Interceptor), four weapons (Fists, P-9 Pistol, Kobra SMG, Muelle 12ga),
-  cash/respect ranks from Nobody to Kingpin, and a local save.
+- **Marina Alta** — the promenade, the colonnade, Marisol's corner
+- **Las Palmas** — palm avenues and the race start
+- **Centro Alba** — the clock tower and the shopping rows
+- **Viejo Puerto** — the old port, warehouses and the alley
+- **El Faro** — the lighthouse point
+- **Playa Brava** — the beach strip and Bar La Ola
 
-## Structure
-
-- `main.ts` — the hand-in program: copies `game/` and `screenshots/` to the
-  output directory and writes `dossier.json` with the vendored library.
-- `game/src/` — ES modules: world and sky (`world.js`), the city (`city.js`),
-  people and poses (`people.js`), cars (`vehicles.js`), police and the air
-  unit (`police.js`, `officers.js`, `helicopter.js`), gunplay and effects
-  (`combat.js`, `effects.js`), story and missions (`story.js`, `missions.js`),
-  HUD and maps (`hud.js`, `minimap.js`), and the staged screenshot scenes
-  (`shots.js`).
+Built with Three.js (vendored) and plain JavaScript modules. MIT.

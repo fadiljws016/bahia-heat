@@ -1,52 +1,56 @@
-// camera.js — third-person follow camera for live play, plus the staged
-// camera staging locks onto for the screenshot scenes.
+// camera.js — the follow camera and the staged camera. In shot mode the
+// camera is whatever stageCamera last set; the follow rig stands down.
 
 import { G } from './state.js';
-import { clamp, lerp } from './util.js';
+import { lerp, lerpAngle, clamp } from './util.js';
 import { input } from './input.js';
 
-let _smoothX = 0, _smoothY = 2, _smoothZ = 0, _init = false;
+let yaw = 0;
+let pitch = 0.32;
+let staged = false;
+const camPos = new THREE.Vector3(-195.9, 1.55, -3.1);
+const camLook = new THREE.Vector3(-192.9, 1.2, -6.1);
 
-// Pin the camera to an exact seat and look target (screenshot staging).
+export function camYaw() { return yaw; }
+
 export function stageCamera(x, y, z, lookX, lookY, lookZ) {
-  G.stagedCam = { x, y, z, lookX, lookY, lookZ };
+  staged = true;
+  camPos.set(x, y, z);
+  camLook.set(lookX, lookY, lookZ);
   if (G.camera) {
-    G.camera.position.set(x, y, z);
-    G.camera.lookAt(lookX, lookY, lookZ);
+    G.camera.position.copy(camPos);
+    G.camera.lookAt(camLook);
   }
-}
-
-export function clearStagedCamera() {
-  G.stagedCam = null;
-  _init = false;
 }
 
 export function updateCamera(dt) {
   const cam = G.camera;
   if (!cam) return;
-  if (G.stagedCam) {
-    const s = G.stagedCam;
-    cam.position.set(s.x, s.y, s.z);
-    cam.lookAt(s.lookX, s.lookY, s.lookZ);
+  if (G.shotMode || staged) {
+    cam.position.copy(camPos);
+    cam.lookAt(camLook);
     return;
   }
   const p = G.player;
   if (!p) return;
-  // Mouse orbit around the player; the car pulls the camera back and down.
-  const yaw = input.yaw;
-  const pitch = clamp(input.pitch, -0.12, 0.62);
-  const dist = p.car ? 9.5 : 6.2;
-  const height = p.car ? 3.2 : 2.4;
-  const tx = (p.car ? p.car.x : p.x) - Math.sin(yaw) * Math.cos(pitch) * dist;
-  const tz = (p.car ? p.car.z : p.z) - Math.cos(yaw) * Math.cos(pitch) * dist;
+  yaw -= input.mouseDX * 0.0032;
+  pitch = clamp(pitch + input.mouseDY * 0.0028, -0.1, 1.1);
+  const inCar = !!p.car;
+  const dist = inCar ? 8.6 : 5.4;
+  const height = inCar ? 3.0 : 2.3;
+  const anchorYaw = inCar ? p.car.heading : p.heading;
+  if (input.mouseDX === 0 && (input.forward !== 0)) yaw = lerpAngle(yaw, anchorYaw + Math.PI, dt * 2.2);
+  const tx = p.x - Math.sin(yaw) * Math.cos(pitch) * dist;
+  const tz = p.z - Math.cos(yaw) * Math.cos(pitch) * dist;
   const ty = height + Math.sin(pitch) * dist;
-  if (!_init) { _smoothX = tx; _smoothY = ty; _smoothZ = tz; _init = true; }
-  const k = Math.min(1, dt * (p.car ? 5 : 8));
-  _smoothX = lerp(_smoothX, tx, k);
-  _smoothY = lerp(_smoothY, Math.max(0.7, ty), k);
-  _smoothZ = lerp(_smoothZ, tz, k);
-  cam.position.set(_smoothX, _smoothY, _smoothZ);
-  const lookX = (p.car ? p.car.x : p.x) + Math.sin(yaw) * 4;
-  const lookZ = (p.car ? p.car.z : p.z) + Math.cos(yaw) * 4;
-  cam.lookAt(lookX, 1.3, lookZ);
+  cam.position.x = lerp(cam.position.x, tx, 1 - Math.pow(0.0001, dt));
+  cam.position.y = lerp(cam.position.y, Math.max(0.6, ty), 1 - Math.pow(0.0001, dt));
+  cam.position.z = lerp(cam.position.z, tz, 1 - Math.pow(0.0001, dt));
+  cam.lookAt(p.x, 1.4, p.z);
+  // FOV kick at speed.
+  const target = inCar ? 62 + Math.min(14, Math.abs(p.car.speed) * 0.28) : 58;
+  if (Math.abs(cam.fov - target) > 0.1) {
+    cam.fov = lerp(cam.fov, target, dt * 3);
+    cam.updateProjectionMatrix();
+  }
 }

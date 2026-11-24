@@ -1,36 +1,23 @@
-// Bahia Heat — hand-in program for the make.fun gta6-01 bounty.
-// Node 22, standard library only. Copies the static game (game/) and the
-// screenshots (screenshots/) from beside this file into the output
-// directory, then writes dossier.json there with the vendored make.fun
-// library. The output is a pure function of the repository contents, so
-// two runs over the same tree produce byte-identical dossiers.
-//
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+// Bahia Heat — make.fun entry builder.
+// Copies the static game and its screenshots into the output directory
+// and writes the submission dossier. Node standard library only, and
+// deterministic: two runs over the same tree produce identical bytes.
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
-const here = fileURLToPath(new URL('.', import.meta.url));
-const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const root = dirname(fileURLToPath(import.meta.url));
+const out = process.argv[2] ? resolve(process.argv[2]) : join(root, 'dist');
 
+rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
-// The game itself: plain static files a desktop browser loads offline.
-cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
+cpSync(join(root, 'game'), join(out, 'game'), { recursive: true });
+cpSync(join(root, 'screenshots'), join(out, 'screenshots'), { recursive: true });
 
-// The four staged screenshots; the first by name is the cover.
-mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) {
-  cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
-}
-
-// The dossier, held to the scorer's caps: at most 4 screenshots of at most
-// 256 KiB each, at most 993 entries and 48 MiB under game/, no game/ path
-// over 1000 bytes.
-const dossier = buildDossier(out, {
+const dossier = await buildDossier(out, {
   text_max_bytes: 163840,
   screenshots: { max: 4, max_bytes: 262144 },
   game_max_files: 993,
@@ -38,3 +25,5 @@ const dossier = buildDossier(out, {
   game_path_max_bytes: 1000,
 });
 writeFileSync(join(out, 'dossier.json'), dossier);
+
+console.log(`Bahia Heat built -> ${out}`);

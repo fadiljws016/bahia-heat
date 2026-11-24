@@ -1,72 +1,47 @@
-// officers.js — PAPD foot officers: the navy figures who hold roadblocks,
-// take cover behind their cruisers and keep up a live fire pattern in the
-// staged scenes. spawnOfficerAt is the staging entry point.
+// officers.js — PAPD foot units: they spawn at cruisers and roadblocks,
+// take cover, fire on cadence, go down, and get replaced while the heat
+// is on. spawnOfficerAt is also the staging API shots.js uses, with
+// phases 'fire' and 'crouch' frozen for the camera.
 
 import { G } from './state.js';
-import { randRange, lerpAngle, dist2d } from './util.js';
+import { dist2d, lerpAngle } from './util.js';
 import { buildPersonMesh, posePerson, showWeapon } from './people.js';
 import { gunshotFx } from './effects.js';
 import { hurtPlayer } from './player.js';
 
-const NAVY = 0x27355a;
-let _unitCounter = 863;
+let officerSeq = 1;
 
 export function spawnOfficerAt(x, z, opts = {}) {
-  const mesh = buildPersonMesh({
-    skin: 0xc98a5e, shirt: NAVY, pants: 0x1f2733, hair: 0x1d1410,
-    dress: false, cap: true, capColor: 0x1f2c44, belt: 0xd8b13c, seed: 7000 + G.officers.length * 13,
-  });
+  const mesh = buildPersonMesh({ skin: 0xc98a5e, shirt: 0x27313a, pants: 0x27313a, hair: 0x1d1410, uniform: 0x27313a });
   mesh.position.set(x, 0, z);
-  if (G.scene) G.scene.add(mesh);
+  mesh.rotation.y = opts.heading || 0;
+  G.scene.add(mesh);
+  showWeapon(mesh, 'pistol', 'hand');
   const off = {
-    mesh, x, z,
-    heading: opts.heading || 0,
-    phase: opts.phase || 'stand',     // 'fire' | 'crouch' | 'chase' | 'stand'
-    homeCar: opts.homeCar || null,
-    roadblock: opts.roadblock || null,
-    target: opts.target || null,      // {x, z} or an actor with x/z
-    health: 100, down: false,
-    unit: _unitCounter++,
-    fireTimer: randRange(Math.random, 0.2, 1.4),
-    posePhase: randRange(Math.random, 0, 6),
-    staged: !!opts.staged,
+    id: officerSeq, x, z, heading: opts.heading || 0, mesh,
+    hp: 100, dead: false, phase: opts.phase || 'cover',
+    homeCar: opts.homeCar || null, roadblock: opts.roadblock || null,
+    fireT: 0.3 + Math.random() * 0.9, phaseT: Math.random() * 3,
+    posePhase: Math.random() * 4,
   };
-  showWeapon(mesh, 'pistol', off.phase === 'fire' || off.phase === 'crouch' ? 'hand' : 'hip');
+  officerSeq += 1;
   G.officers.push(off);
-  applyPose(off, 0);
   return off;
 }
 
-function applyPose(off, phase) {
-  const pose = off.down ? 'down'
-    : off.phase === 'fire' ? 'fire'
-    : off.phase === 'crouch' ? 'crouch'
-    : off.phase === 'chase' ? 'run'
-    : 'stand';
-  posePerson(off.mesh, pose, phase);
-  off.mesh.position.set(off.x, off.mesh.userData.yOff || 0, off.z);
-  off.mesh.rotation.y = off.heading;
-}
-
 export function spawnRoadblockOfficers(rb) {
-  const made = [];
-  made.push(spawnOfficerAt(rb.x - 2.2, rb.z + 2.8, { phase: 'crouch', roadblock: rb, staged: G.shotMode }));
-  made.push(spawnOfficerAt(rb.x + 5.4, rb.z + 2.8, { phase: 'fire', roadblock: rb, staged: G.shotMode }));
-  return made;
+  const a = spawnOfficerAt(rb.x - 2.2, rb.z + 2.8, { phase: 'crouch', roadblock: rb, heading: Math.PI });
+  const b = spawnOfficerAt(rb.x + 5.4, rb.z + 2.8, { phase: 'fire', roadblock: rb, heading: Math.PI });
+  return [a, b];
 }
 
-// Live play keeps a small foot presence near the station and the marina.
 export function ensureOfficers() {
-  if (G.shotMode) return;
-  const want = G.wanted >= 2 ? 4 : 2;
-  const alive = G.officers.filter((o) => !o.down && !o.staged);
-  if (alive.length >= want) return;
-  const spots = [[168, 44], [-196, 20], [104, -36], [30, 26]];
-  for (const [x, z] of spots) {
-    if (alive.length >= want) break;
-    if (alive.some((o) => dist2d(o.x, o.z, x, z) < 6)) continue;
-    spawnOfficerAt(x, z, { phase: 'stand' });
-  }
+  const want = G.wanted >= 3.5 ? 5 : G.wanted >= 2 ? 3 : G.wanted >= 1 ? 1 : 0;
+  const alive = G.officers.filter((o) => !o.dead && !o.roadblock).length;
+  if (alive >= want || !G.player) return;
+  const p = G.player;
+  const a = Math.random() * Math.PI * 2;
+  spawnOfficerAt(p.x + Math.cos(a) * 26, p.z + Math.sin(a) * 26, { phase: 'cover' });
 }
 
 export function removeOfficer(off) {
@@ -76,58 +51,68 @@ export function removeOfficer(off) {
 }
 
 export function hurtOfficer(off, amount) {
-  if (off.down) return;
-  off.health -= amount;
-  if (off.health <= 0) {
-    off.down = true;
-    applyPose(off, 0);
+  if (off.dead) return;
+  off.hp -= amount;
+  if (off.hp <= 0) {
+    off.dead = true;
+    posePerson(off.mesh, 'down', 0);
+    if (typeof window !== 'undefined') {
+      // The response escalates when an officer goes down.
+      G.heat += 0.8;
+    }
   }
-}
-
-function targetPoint(off) {
-  if (off.target && typeof off.target.x === 'number') return off.target;
-  if (G.player) return G.player;
-  return { x: off.x + Math.sin(off.heading) * 8, z: off.z + Math.cos(off.heading) * 8 };
-}
-
-// One live round from a staged 'fire' officer: muzzle at the gun tip,
-// tracer to the target's chest, sparks where it lands.
-export function officerShoot(off) {
-  const t = targetPoint(off);
-  const mx = off.x + Math.sin(off.heading) * 0.45;
-  const mz = off.z + Math.cos(off.heading) * 0.45;
-  gunshotFx(mx, 1.32, mz, t.x, 1.15, t.z, { heading: off.heading });
 }
 
 export function updateOfficers(dt) {
+  const p = G.player;
   for (const off of G.officers) {
-    if (off.down) continue;
-    off.posePhase += dt * 2;
-    const t = targetPoint(off);
-    if (off.phase === 'fire' || off.phase === 'crouch') {
-      // Hold position, track the target, fire in ragged bursts.
-      const want = Math.atan2(t.x - off.x, t.z - off.z);
-      off.heading = lerpAngle(off.heading, want, Math.min(1, dt * 5));
-      off.fireTimer -= dt;
-      if (off.fireTimer <= 0) {
-        officerShoot(off);
-        off.fireTimer = off.phase === 'fire' ? randRange(Math.random, 0.35, 1.1) : randRange(Math.random, 0.9, 1.8);
-        if (!G.shotMode && G.player && dist2d(off.x, off.z, G.player.x, G.player.z) < 26 && Math.random() < 0.3) {
-          hurtPlayer(3 + Math.random() * 4);
-        }
+    if (off.dead) continue;
+    off.posePhase += dt * 1.7;
+    off.phaseT -= dt;
+    if (p && !G.shotMode) {
+      const d = dist2d(off.x, off.z, p.x, p.z);
+      const targetHeading = Math.atan2(p.x - off.x, p.z - off.z);
+      off.heading = lerpAngle(off.heading, targetHeading, dt * 5);
+      // Phase machine: advance, cover, fire.
+      if (off.phaseT <= 0) {
+        off.phaseT = 1.6 + Math.random() * 2.4;
+        off.phase = off.phase === 'fire' ? 'cover' : (d < 26 ? 'fire' : 'advance');
       }
-    } else if (!G.shotMode && off.phase === 'chase' && G.player) {
-      const d = dist2d(off.x, off.z, G.player.x, G.player.z);
-      const want = Math.atan2(G.player.x - off.x, G.player.z - off.z);
-      off.heading = lerpAngle(off.heading, want, Math.min(1, dt * 6));
-      if (d > 2.2) {
-        off.x += Math.sin(off.heading) * 3.6 * dt;
-        off.z += Math.cos(off.heading) * 3.6 * dt;
-      } else if (Math.random() < dt * 0.8) {
-        officerShoot(off);
-        if (Math.random() < 0.4) hurtPlayer(2 + Math.random() * 3);
+      if (off.phase === 'advance' && d > 13) {
+        off.x += Math.sin(off.heading) * 2.6 * dt;
+        off.z += Math.cos(off.heading) * 2.6 * dt;
+        posePerson(off.mesh, 'run', off.posePhase * 2.2);
+      } else if (off.phase === 'fire') {
+        posePerson(off.mesh, off.fireT < 0.15 ? 'fire' : 'aim', off.posePhase, { recoil: off.fireT < 0 ? 1 : 0 });
+        off.fireT -= dt;
+        if (off.fireT <= 0 && d < 30 && !p.dead) {
+          off.fireT = 0.6 + Math.random() * 0.9;
+          gunshotFx(off.x + Math.sin(off.heading) * 0.4, 1.32, off.z + Math.cos(off.heading) * 0.4, p.x, 1.15, p.z, { heading: off.heading, sparks: 2 });
+          if (Math.random() < 0.34) hurtPlayer(3 + Math.random() * 5);
+        }
+      } else {
+        posePerson(off.mesh, Math.random() < 0.5 ? 'crouch' : 'aim', off.posePhase);
+      }
+    } else {
+      // Staged: hold the phase the staging asked for, firing on cadence.
+      if (off.phase === 'fire') {
+        off.fireT -= dt;
+        posePerson(off.mesh, off.fireT < 0.15 ? 'fire' : 'aim', off.posePhase, { recoil: off.fireT < 0 ? 1 : 0 });
+        if (off.fireT <= 0 && p) {
+          off.fireT = 0.5 + Math.random() * 0.7;
+          const foe = off.foe || (off.roadblock && off.roadblock.foe) || p;
+          const tx = foe.x;
+          const tz = foe.z;
+          gunshotFx(off.x + Math.sin(off.heading) * 0.4, 1.32, off.z + Math.cos(off.heading) * 0.4, tx, 1.15, tz, { heading: off.heading, sparks: 2 });
+        }
+      } else if (off.phase === 'crouch') {
+        posePerson(off.mesh, 'crouch', off.posePhase);
+      } else {
+        posePerson(off.mesh, 'aim', off.posePhase);
       }
     }
-    applyPose(off, off.posePhase);
+    off.mesh.position.set(off.x, 0, off.z);
+    off.mesh.rotation.y = off.heading;
   }
+  if (!G.shotMode) ensureOfficers();
 }

@@ -1,197 +1,244 @@
-// missions.js — the stage engine: reads story.js data, tracks the live
-// stage, feeds the HUD panel and the map objective, pays out at the end.
+// missions.js — the job engine: dialogue flow, stage activation and
+// completion for every stage kind (goto / steal / deliverCar / timed /
+// escape / fight / race / fare / takedown), rewards and rank-ups.
+// G.mission is the live runtime; shots.js stages it directly for the
+// screenshots, so missionPanelInfo reads plain fields, not closures.
 
 import { G } from './state.js';
-import { dist2d } from './util.js';
 import { PLACES } from './city.js';
-import { MISSIONS, CHARACTERS } from './story.js';
-import { rankFor } from './state.js';
+import { MISSIONS } from './story.js';
+import { dist2d } from './util.js';
+import { input } from './input.js';
+import { createCar } from './vehicles.js';
+import { spawnPedAt } from './pedestrians.js';
+import { addCrime, setWantedFloor } from './police.js';
+import { sfx } from './audio.js';
 import { writeSave } from './save.js';
-import { spawnPedAt, hurtPed } from './pedestrians.js';
-import { addCrime, clearWanted } from './police.js';
 
-export function currentMission() {
-  if (!G.mission) return null;
-  return MISSIONS[G.mission.index] || null;
-}
-
-export function currentStage() {
-  const m = currentMission();
-  if (!m || !G.mission) return null;
-  return m.stages[G.mission.stage] || null;
-}
-
-export function startMission(index) {
-  const m = MISSIONS[index];
-  if (!m) return;
-  G.mission = { index, stage: 0, timerLeft: null, active: true, checkpoint: 0, kills: 0, targetPed: null };
-  armStage();
-  startDialogue(m.intro, null);
-}
-
-function armStage() {
-  const st = currentStage();
-  if (!st || !G.mission) return;
-  G.mission.timerLeft = st.time || null;
-  G.mission.checkpoint = 0;
-  G.mission.kills = 0;
-  if (st.type === 'fight' || st.type === 'takedown') spawnStageEnemies(st);
-}
-
-function spawnStageEnemies(st) {
-  const at = st.place ? PLACES[st.place] : { x: G.player.x + 8, z: G.player.z + 8 };
-  if (st.type === 'takedown') {
-    const ped = spawnPedAt(at.x + 3, at.z + 2, 'stand', { outfit: { shirt: 0xd8402e }, seed: 9101 });
-    ped.name = 'lieutenant';
-    G.mission.targetPed = ped;
-    return;
-  }
-  const n = st.enemies || 3;
-  for (let i = 0; i < n; i++) {
-    const ped = spawnPedAt(at.x + (i - n / 2) * 3.2, at.z + 4 + (i % 2) * 3, 'stand', {
-      outfit: { shirt: 0xd8402e }, seed: 9200 + i, weapon: 'smg',
-    });
-    ped.name = 'hostile';
-    ped.state = 'hostile';
-  }
-}
-
-export function objectivePoint() {
-  const st = currentStage();
-  if (!st || !G.mission || !G.mission.active) return null;
-  if (st.type === 'escape') return null;
-  if ((st.type === 'race' || st.type === 'fare') && st.checkpoints) {
-    const key = st.checkpoints[Math.min(G.mission.checkpoint, st.checkpoints.length - 1)];
-    const p = PLACES[key];
-    return p ? { x: p.x, z: p.z, label: p.label } : null;
-  }
-  if (st.place && PLACES[st.place]) {
-    const p = PLACES[st.place];
-    return { x: p.x, z: p.z, label: p.label };
-  }
-  return null;
-}
-
-export function missionPanelInfo() {
-  const m = currentMission();
-  const st = currentStage();
-  if (!m || !st || !G.mission.active) return null;
-  return {
-    title: m.title,
-    stage: `STAGE ${G.mission.stage + 1} OF ${m.stages.length}`,
-    objective: st.objective,
-    next: st.next,
-    timer: G.mission.timerLeft,
-  };
-}
-
-// --- Dialogue ---------------------------------------------------------------
+const RACE_POINTS = [
+  { x: 140, z: 140 }, { x: 200, z: 20 }, { x: 140, z: -100 }, { x: 20, z: -160 },
+  { x: -100, z: -100 }, { x: -160, z: 20 }, { x: -100, z: 140 }, { x: 20, z: 200 },
+];
 
 export function startDialogue(lines, onDone) {
-  if (!lines || !lines.length) { if (onDone) onDone(); return; }
   G.dialogue = { lines, index: 0, onDone: onDone || null };
 }
 
 export function advanceDialogue() {
   const d = G.dialogue;
   if (!d) return;
-  d.index++;
+  d.index += 1;
   if (d.index >= d.lines.length) {
     G.dialogue = null;
     if (d.onDone) d.onDone();
   }
 }
 
-// --- Flow -------------------------------------------------------------------
-
-export function restartCurrentJob() {
-  if (!G.mission) return;
-  const idx = G.mission.index;
-  clearWanted();
-  G.health = Math.max(G.health, 60);
-  startMission(idx);
+function placeOf(stage) {
+  return stage.at ? PLACES[stage.at] : null;
 }
 
-function completeMission() {
-  const m = currentMission();
-  if (!m) return;
-  G.cash += m.reward.cash;
-  G.respect += m.reward.respect;
-  const r = rankFor(G.respect);
-  G.rankIndex = r.index;
-  if (m.unlock && !G.unlocked[m.unlock]) {
-    G.unlocked[m.unlock] = true;
-    G.ammo[m.unlock] = m.unlock === 'pistol' ? 48 : m.unlock === 'smg' ? 90 : 12;
-  }
-  const nextIndex = G.mission.index + 1;
-  G.mission = null;
-  writeSave();
-  startDialogue(m.outro, () => {
-    if (nextIndex < MISSIONS.length) startMission(nextIndex);
+export function objectivePoint() {
+  const m = G.mission;
+  if (!m || m.state !== 'active') return null;
+  const stage = m.def.stages[m.stageIndex];
+  if (!stage) return null;
+  if (stage.kind === 'race') return RACE_POINTS[m.raceIndex] || null;
+  if (stage.kind === 'fare') return PLACES.fares[m.fareIndex % PLACES.fares.length] || null;
+  if (stage.kind === 'takedown' && m.targetCar) return { x: m.targetCar.x, z: m.targetCar.z };
+  if (stage.kind === 'escape') return null;
+  return placeOf(stage);
+}
+
+export function missionPanelInfo() {
+  const m = G.mission;
+  if (!m || !m.def) return null;
+  const stage = m.def.stages[m.stageIndex];
+  if (!stage) return null;
+  return {
+    title: m.def.title,
+    stage: `STAGE ${m.stageIndex + 1}/${m.def.stages.length}`,
+    objective: stage.label,
+    next: stage.next || '',
+    timer: m.timerLeft !== null && m.timerLeft !== undefined ? m.timerLeft : (stage.kind === 'timed' ? stage.time : null),
+  };
+}
+
+function saveProgress() {
+  writeSave({
+    cash: G.cash,
+    respect: G.respect,
+    missionIndex: G.missionIndex || 0,
+    unlocked: G.weapons.unlocked,
+    ammo: G.weapons.ammo,
+    garage: G.garage || [],
   });
 }
 
-function advanceStage() {
-  const m = currentMission();
-  if (!m || !G.mission) return;
-  G.mission.stage++;
-  if (G.mission.stage >= m.stages.length) { completeMission(); return; }
-  armStage();
-}
-
-function stageSatisfied(st) {
-  const p = G.player;
-  if (!p) return false;
-  const obj = objectivePoint();
-  switch (st.type) {
-    case 'goto':
-      return obj && dist2d(p.x, p.z, obj.x, obj.z) < (st.radius || 7);
-    case 'steal':
-      return !!p.car;
-    case 'deliverCar':
-      return !!p.car && obj && dist2d(p.x, p.z, obj.x, obj.z) < (st.radius || 8);
-    case 'timed':
-      return !!obj && dist2d(p.car ? p.car.x : p.x, p.car ? p.car.z : p.z, obj.x, obj.z) < (st.radius || 9);
-    case 'escape':
-      return G.wanted < 0.4;
-    case 'fight': {
-      const alive = G.peds.filter((x) => x.name === 'hostile' && !x.down);
-      return alive.length === 0;
+function activateStage(m) {
+  const stage = m.def.stages[m.stageIndex];
+  m.timerLeft = stage.kind === 'timed' ? stage.time : null;
+  m.stageT = 0;
+  if (stage.kind === 'steal') {
+    const at = placeOf(stage);
+    m.targetCar = createCar('sedan', at.x + 3.5, at.z + 2, Math.PI / 2, 0x2478cc, Math.random);
+    m.targetCar.parked = true;
+  }
+  if (stage.kind === 'escape') {
+    setWantedFloor(stage.wanted || 3);
+    addCrime(0, 'escape');
+  }
+  if (stage.kind === 'fight') {
+    const at = placeOf(stage);
+    m.killsLeft = stage.count || 4;
+    for (let i = 0; i < m.killsLeft; i += 1) {
+      const a = (i / m.killsLeft) * Math.PI * 2;
+      const ped = spawnPedAt(at.x + Math.cos(a) * 9, at.z + Math.sin(a) * 9, 'stand', { hostile: true, color: 0xd8402e });
+      ped.hostile = true;
+      ped.hp = 60;
     }
-    case 'takedown':
-      return !!(G.mission.targetPed && G.mission.targetPed.down);
-    case 'race':
-    case 'fare': {
-      if (!obj) return false;
-      const px = p.car ? p.car.x : p.x, pz = p.car ? p.car.z : p.z;
-      if (dist2d(px, pz, obj.x, obj.z) < (st.radius || 9)) {
-        G.mission.checkpoint++;
-        if (G.mission.checkpoint >= st.checkpoints.length) return true;
-      }
-      return false;
-    }
-    default:
-      return false;
+  }
+  if (stage.kind === 'race') m.raceIndex = 0;
+  if (stage.kind === 'fare') { m.fareIndex = 0; m.faresDone = 0; m.fareWait = 0; }
+  if (stage.kind === 'takedown') {
+    const at = placeOf(stage);
+    m.targetCar = createCar('sport', at.x, at.z, 0.6, 0xff4438, Math.random);
+    m.targetCar.driver = { flee: true };
   }
 }
+
+function completeMission(m) {
+  const def = m.def;
+  G.cash += def.reward.cash;
+  G.respect += def.reward.respect;
+  sfx.cash();
+  G.missionIndex = Math.max(G.missionIndex || 0, MISSIONS.indexOf(def) + 1);
+  G.mission = null;
+  saveProgress();
+  if (def.outro) startDialogue(def.outro, null);
+  G.message = `${def.title} complete — $${def.reward.cash}`;
+  G.messageT = 4;
+}
+
+function failMission(m) {
+  sfx.fail();
+  G.mission = null;
+  G.message = 'Job failed — the giver will still take your call';
+  G.messageT = 4;
+}
+
+export function restartCurrentJob() {
+  const m = G.mission;
+  if (!m) return;
+  startMission(MISSIONS.indexOf(m.def));
+}
+
+function startMission(index) {
+  const def = MISSIONS[index];
+  if (!def) return;
+  const m = { def, stageIndex: 0, state: 'intro', timerLeft: null, stageT: 0, raceIndex: 0, fareIndex: 0, killsLeft: 0, targetCar: null };
+  G.mission = m;
+  startDialogue(def.intro, () => {
+    m.state = 'active';
+    activateStage(m);
+  });
+}
+
+const GIVERS = [
+  { key: 'marisol', at: 'marisol' },
+  { key: 'tito', at: 'raceStart' },
+  { key: 'dario', at: 'garage' },
+];
 
 export function updateMissions(dt) {
-  if (!G.mission || !G.mission.active || G.shotMode || G.dialogue) return;
-  const st = currentStage();
-  if (!st) return;
-  if (G.mission.timerLeft !== null && G.mission.timerLeft !== undefined) {
-    G.mission.timerLeft -= dt;
-    if (G.mission.timerLeft <= 0) {
-      G.mission.timerLeft = st.time || 60;
-      addCrime(0.4, 'Running late');
+  const p = G.player;
+  if (!p) return;
+  // Offer the next job at a giver's spot.
+  if (!G.mission && !G.dialogue && G.mode === 'playing') {
+    for (const g of GIVERS) {
+      const at = PLACES[g.at];
+      if (dist2d(p.x, p.z, at.x, at.z) < 4.5) {
+        const next = MISSIONS.findIndex((m, i) => m.giver === g.key && i >= (G.missionIndex || 0));
+        const idx = MISSIONS.findIndex((m, i) => m.giver === g.key && i === (G.missionIndex || 0));
+        if (idx >= 0 && input.interact) startMission(idx);
+        else if (next >= 0 && idx < 0 && input.interact) startMission(next);
+        break;
+      }
     }
   }
-  if (stageSatisfied(st)) advanceStage();
+  const m = G.mission;
+  if (!m || m.state !== 'active') return;
+  const stage = m.def.stages[m.stageIndex];
+  if (!stage) { completeMission(m); return; }
+  m.stageT += dt;
+  let done = false;
+  const at = placeOf(stage);
+  switch (stage.kind) {
+    case 'goto':
+      done = at && dist2d(p.x, p.z, at.x, at.z) < 6;
+      break;
+    case 'steal':
+      done = !!(m.targetCar && p.car === m.targetCar);
+      if (done) addCrime(1.2, 'grand theft');
+      break;
+    case 'deliverCar':
+      done = !!(p.car && at && dist2d(p.x, p.z, at.x, at.z) < 8);
+      break;
+    case 'timed':
+      m.timerLeft -= dt;
+      if (m.timerLeft <= 0) { failMission(m); return; }
+      done = !!(p.car && at && dist2d(p.x, p.z, at.x, at.z) < 8);
+      break;
+    case 'escape':
+      done = G.wanted < 0.4 && m.stageT > 4;
+      break;
+    case 'fight':
+      done = (m.killsLeft || 0) <= 0;
+      break;
+    case 'race': {
+      const cp = RACE_POINTS[m.raceIndex];
+      if (cp && p.car && dist2d(p.x, p.z, cp.x, cp.z) < 10) {
+        sfx.checkpoint();
+        m.raceIndex += 1;
+        if (m.raceIndex >= RACE_POINTS.length) done = true;
+      }
+      break;
+    }
+    case 'fare': {
+      const stop = PLACES.fares[m.fareIndex % PLACES.fares.length];
+      if (stop && dist2d(p.x, p.z, stop.x, stop.z) < 7) {
+        m.fareWait += dt;
+        if (m.fareWait > 1.2) {
+          m.fareWait = 0;
+          m.fareIndex += 1;
+          m.faresDone += 1;
+          sfx.cash();
+          if (m.faresDone >= (stage.count || 3)) done = true;
+        }
+      } else m.fareWait = 0;
+      break;
+    }
+    case 'takedown': {
+      const car = m.targetCar;
+      if (car) {
+        if (car.driver && car.driver.flee && !car.dead) {
+          const away = Math.atan2(car.x - p.x, car.z - p.z);
+          car.heading += Math.max(-dt, Math.min(dt, (away - car.heading + Math.PI * 3) % (Math.PI * 2) - Math.PI));
+          car.speed = Math.min(car.spec.topSpeed * 0.8, car.speed + car.spec.accel * dt);
+          car.x += Math.sin(car.heading) * car.speed * dt;
+          car.z += Math.cos(car.heading) * car.speed * dt;
+        }
+        done = car.dead || car.hp < car.spec.hp * 0.4;
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  if (done) {
+    sfx.checkpoint();
+    m.stageIndex += 1;
+    if (m.stageIndex >= m.def.stages.length) completeMission(m);
+    else activateStage(m);
+  }
 }
-
-// Boot helper for a fresh game: Marisol's first job is always on the board.
-export function offerFirstMission() {
-  if (!G.mission) startMission(0);
-}
-
-export { CHARACTERS };

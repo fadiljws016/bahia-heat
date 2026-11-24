@@ -1,248 +1,288 @@
-// effects.js — pooled particles and the gunfire language of Bahia Heat.
-// The gunfire look is FINAL and pinned: thin warm tracer dashes, small
-// orange muzzle-tip star flashes, sparks, ejected casings, and warm-grey
-// smoke (muzzle 0x8a7f70, dust 0x99876c, opacity ~0.32). Do not restyle.
+// effects.js — gunfire and damage feedback. THE RECIPE IS LOCKED (owner
+// approved, rounds 4-5): two THREE.Points pools wearing a soft round dot
+// texture — sparks small and bright (size 0.36, pool 1800), smoke big and
+// slow but THIN (size 1.55, opacity 0.32, pool 900) — short warm tracer
+// dashes caught mid-flight (0xffb347, never a full beam), compact star
+// muzzle flashes, brass casings. Per gunshot the smoke counts are tiny on
+// purpose: 1 wisp at the muzzle, 2 dust at the impact. Anything bigger
+// piles into solid clouds and the fight stops reading.
 
-import { clamp } from './util.js';
+const SPARKS = 1800;
+const SMOKES = 900;
+const TRACERS = 64;
+const FLASHES = 24;
+const CASINGS = 128;
 
-let _scene = null;
-const _particles = [];   // { mesh, vx, vy, vz, life, maxLife, grav, drag, spin, fade }
-const _pool = [];
-const _boxGeo = new THREE.BoxGeometry(1, 1, 1);
-const _smokeTex = makeSmokeTexture();
+let sparkPts = null;
+let sparkPos = null;
+let sparkCol = null;
+const sparkParts = [];
+let sparkCursor = 0;
+let smokePts = null;
+let smokePos = null;
+let smokeCol = null;
+const smokeParts = [];
+let smokeCursor = 0;
+const tracerPool = [];
+const flashPool = [];
+let casingMesh = null;
+const casings = [];
+let casingObj = null;
+let flashLight = null;
+const colorTmp = new THREE.Color();
 
-function makeSmokeTexture() {
+function makeSoftDotTexture() {
   const c = document.createElement('canvas');
-  c.width = c.height = 64;
+  c.width = 64;
+  c.height = 64;
   const g = c.getContext('2d');
-  const gr = g.createRadialGradient(32, 32, 2, 32, 32, 30);
-  gr.addColorStop(0, 'rgba(255,255,255,0.85)');
-  gr.addColorStop(0.6, 'rgba(255,255,255,0.38)');
-  gr.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = gr;
+  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.5, 'rgba(255,255,255,0.55)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
   g.fillRect(0, 0, 64, 64);
   return new THREE.CanvasTexture(c);
 }
 
-export function initEffects(scene) {
-  _scene = scene;
-}
-
-function spawn(mesh, vx, vy, vz, life, opts = {}) {
-  mesh.visible = true;
-  if (_scene && !mesh.parent) _scene.add(mesh);
-  _particles.push({
-    mesh, vx, vy, vz, life, maxLife: life,
-    grav: opts.grav !== undefined ? opts.grav : 0,
-    drag: opts.drag || 0,
-    spin: opts.spin || 0,
-    grow: opts.grow || 0,
-    baseOpacity: opts.opacity !== undefined ? opts.opacity : 1,
-    baseScale: mesh.scale.x,
-  });
-  return mesh;
-}
-
-function obtain(geo, mat) {
-  for (let i = _pool.length - 1; i >= 0; i--) {
-    if (_pool[i].geometry === geo && _pool[i].material === mat) {
-      return _pool.splice(i, 1)[0];
-    }
-  }
-  return new THREE.Mesh(geo, mat);
-}
-
-const _mats = {};
-function colorMat(hex, opacity) {
-  const key = `${hex}/${opacity}`;
-  if (!_mats[key]) {
-    _mats[key] = new THREE.MeshBasicMaterial({
-      color: hex, transparent: opacity < 1, opacity, depthWrite: opacity >= 1,
-    });
-  }
-  return _mats[key];
-}
-
-// Generic burst of small coloured shards (sparks, debris, confetti of war).
-export function burst(x, y, z, colorHex, count = 6, power = 2, opts = {}) {
-  if (!_scene) return;
-  const mat = colorMat(colorHex, 1);
-  for (let i = 0; i < count; i++) {
-    const s = 0.05 + Math.random() * 0.09;
-    const m = obtain(_boxGeo, mat);
-    m.position.set(x, y, z);
-    m.scale.setScalar(s);
-    m.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
-    const a = Math.random() * Math.PI * 2;
-    const up = opts.up !== undefined ? opts.up : 0.6;
-    spawn(m,
-      Math.cos(a) * power * (0.3 + Math.random() * 0.7),
-      Math.random() * power * up + power * 0.3,
-      Math.sin(a) * power * (0.3 + Math.random() * 0.7),
-      0.35 + Math.random() * 0.4, { grav: -7, spin: 6 });
-  }
-}
-
-// Warm-grey smoke puffs: soft sprites that rise, swell and thin out.
-export function burstSmoke(x, y, z, count = 4, opts = {}) {
-  if (!_scene) return;
-  const color = opts.color !== undefined ? opts.color : 0x8a7f70;
-  const key = `smoke/${color}`;
-  if (!_mats[key]) {
-    _mats[key] = new THREE.MeshBasicMaterial({
-      map: _smokeTex, color, transparent: true, opacity: 0.32, depthWrite: false,
-    });
-  }
-  const mat = _mats[key];
-  for (let i = 0; i < count; i++) {
-    const m = obtain(_smokePlaneGeo, mat);
-    m.position.set(x + (Math.random() - 0.5) * 0.3, y + (Math.random() - 0.5) * 0.2, z + (Math.random() - 0.5) * 0.3);
-    const s = 0.35 + Math.random() * 0.4;
-    m.scale.set(s, s, 1);
-    m.material = mat;
-    spawn(m,
-      (Math.random() - 0.5) * 0.5 + (opts.vx || 0),
-      0.7 + Math.random() * 0.7,
-      (Math.random() - 0.5) * 0.5 + (opts.vz || 0),
-      0.8 + Math.random() * 0.7, { grow: 1.6, opacity: 0.32, drag: 0.6 });
-  }
-}
-const _smokePlaneGeo = new THREE.PlaneGeometry(1, 1);
-
-// A tracer: a thin warm dash stretched between muzzle and target, gone in a
-// blink. Length reads as speed; the colour never changes.
-const _tracerGeo = new THREE.BoxGeometry(0.045, 0.045, 1);
-export function tracer(x1, y1, z1, x2, y2, z2, colorHex = 0xffb347) {
-  if (!_scene) return;
-  const dx = x2 - x1, dy = y2 - y1, dz = z2 - z1;
-  const len = Math.hypot(dx, dy, dz);
-  if (len < 0.5) return;
-  const mat = colorMat(colorHex, 0.95);
-  const m = obtain(_tracerGeo, mat);
-  // Show the dash over the last stretch of the path, like a moving round.
-  const frac = Math.min(1, 2.6 / len);
-  m.position.set(x2 - dx * frac * 0.5, y2 - dy * frac * 0.5, z2 - dz * frac * 0.5);
-  m.scale.set(1, 1, len * frac);
-  m.lookAt(x2, y2, z2);
-  spawn(m, 0, 0, 0, 0.07, {});
-}
-
-// The muzzle flash: a small orange star of two crossed planes at the tip.
-const _starGeo = new THREE.PlaneGeometry(0.34, 0.34);
-const _starTex = makeStarTexture();
-function makeStarTexture() {
+function makeFlashTexture() {
   const c = document.createElement('canvas');
-  c.width = c.height = 64;
+  c.width = 64;
+  c.height = 64;
   const g = c.getContext('2d');
-  g.translate(32, 32);
-  g.fillStyle = 'rgba(255,170,60,1)';
-  for (let i = 0; i < 4; i++) {
-    g.rotate(Math.PI / 4);
-    g.beginPath();
-    g.moveTo(0, -30); g.lineTo(5, -6); g.lineTo(-5, -6);
-    g.closePath(); g.fill();
-  }
-  g.fillStyle = 'rgba(255,230,170,1)';
-  g.beginPath(); g.arc(0, 0, 8, 0, 7); g.fill();
+  // Compact star polygon.
+  g.beginPath();
+  const spikes = [[32, 2], [36.5, 27.5], [58, 32], [36.5, 36.5], [32, 58], [27.5, 36.5], [6, 32], [27.5, 27.5]];
+  spikes.forEach(([x, y], i) => (i === 0 ? g.moveTo(x, y) : g.lineTo(x, y)));
+  g.closePath();
+  const grad = g.createRadialGradient(32, 32, 1, 32, 32, 13);
+  grad.addColorStop(0, 'rgba(255,214,90,1)');
+  grad.addColorStop(0.55, 'rgba(255,166,48,0.95)');
+  grad.addColorStop(1, 'rgba(255,110,26,0)');
+  g.fillStyle = grad;
+  g.fill();
   return new THREE.CanvasTexture(c);
 }
+
+export function initEffects(scene) {
+  const dotTex = makeSoftDotTexture();
+  {
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(SPARKS * 3);
+    const col = new Float32Array(SPARKS * 3);
+    for (let i = 0; i < SPARKS; i += 1) { pos[i * 3 + 1] = -999; sparkParts.push({ life: 0, maxLife: 1, vx: 0, vy: 0, vz: 0, grav: 0, drag: 0 }); }
+    sparkPos = new THREE.BufferAttribute(pos, 3);
+    sparkCol = new THREE.BufferAttribute(col, 3);
+    geo.setAttribute('position', sparkPos);
+    geo.setAttribute('color', sparkCol);
+    sparkPts = new THREE.Points(geo, new THREE.PointsMaterial({
+      size: 0.36, map: dotTex, vertexColors: true, transparent: true, opacity: 0.97, depthWrite: false,
+    }));
+    sparkPts.frustumCulled = false;
+    scene.add(sparkPts);
+  }
+  {
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(SMOKES * 3);
+    const col = new Float32Array(SMOKES * 3);
+    for (let i = 0; i < SMOKES; i += 1) { pos[i * 3 + 1] = -999; smokeParts.push({ life: 0, maxLife: 1, vx: 0, vy: 0, vz: 0, rise: 0, drag: 0 }); }
+    smokePos = new THREE.BufferAttribute(pos, 3);
+    smokeCol = new THREE.BufferAttribute(col, 3);
+    geo.setAttribute('position', smokePos);
+    geo.setAttribute('color', smokeCol);
+    smokePts = new THREE.Points(geo, new THREE.PointsMaterial({
+      size: 1.55, map: dotTex, vertexColors: true, transparent: true, opacity: 0.32, depthWrite: false,
+    }));
+    smokePts.frustumCulled = false;
+    scene.add(smokePts);
+  }
+  // Tracer dashes: short stretched boxes in a pool.
+  const tracerGeo = new THREE.BoxGeometry(0.05, 0.05, 1);
+  for (let i = 0; i < TRACERS; i += 1) {
+    const m = new THREE.Mesh(tracerGeo, new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    m.visible = false;
+    scene.add(m);
+    tracerPool.push({ mesh: m, life: 0, maxLife: 0.09 });
+  }
+  // Muzzle flash sprites.
+  const flashTex = makeFlashTexture();
+  for (let i = 0; i < FLASHES; i += 1) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    s.visible = false;
+    scene.add(s);
+    flashPool.push({ sprite: s, life: 0, maxLife: 0.055 });
+  }
+  flashLight = new THREE.PointLight(0xffb35e, 0, 15);
+  scene.add(flashLight);
+  // Shell casings: one instanced mesh of little brass boxes.
+  casingMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.03, 0.03, 0.09), new THREE.MeshBasicMaterial({ color: 0xe0aa40 }), CASINGS);
+  casingMesh.frustumCulled = false;
+  casingObj = new THREE.Object3D();
+  for (let i = 0; i < CASINGS; i += 1) casings.push({ x: 0, y: -99, z: 0, vx: 0, vy: 0, vz: 0, rot: 0, vr: 0, life: 0 });
+  scene.add(casingMesh);
+}
+
+export function burst(x, y, z, colorHex, count = 6, power = 2, opts = {}) {
+  colorTmp.setHex(colorHex);
+  for (let n = 0; n < count; n += 1) {
+    const i = sparkCursor;
+    sparkCursor = (sparkCursor + 1) % SPARKS;
+    const p = sparkParts[i];
+    p.maxLife = (opts.life ?? 0.7) * (0.6 + Math.random() * 0.7);
+    p.life = p.maxLife;
+    p.vx = (Math.random() - 0.5) * power * 2;
+    p.vy = Math.random() * power * 1.4 + 0.5;
+    p.vz = (Math.random() - 0.5) * power * 2;
+    p.grav = opts.grav ?? 5;
+    p.drag = opts.drag ?? 0.6;
+    sparkPos.array[i * 3] = x;
+    sparkPos.array[i * 3 + 1] = y;
+    sparkPos.array[i * 3 + 2] = z;
+    const shade = 0.75 + Math.random() * 0.4;
+    sparkCol.array[i * 3] = colorTmp.r * shade;
+    sparkCol.array[i * 3 + 1] = colorTmp.g * shade;
+    sparkCol.array[i * 3 + 2] = colorTmp.b * shade;
+  }
+}
+
+export function burstSmoke(x, y, z, count = 4, opts = {}) {
+  colorTmp.setHex(opts.color ?? 0x8a8a8a);
+  for (let n = 0; n < count; n += 1) {
+    const i = smokeCursor;
+    smokeCursor = (smokeCursor + 1) % SMOKES;
+    const p = smokeParts[i];
+    p.maxLife = (opts.life ?? 1.8) * (0.7 + Math.random() * 0.6);
+    p.life = p.maxLife;
+    const power = opts.power ?? 0.6;
+    p.vx = (Math.random() - 0.5) * power;
+    p.vy = (opts.rise ?? 0.5) * (0.6 + Math.random() * 0.6);
+    p.vz = (Math.random() - 0.5) * power;
+    p.drag = 0.4;
+    smokePos.array[i * 3] = x + (Math.random() - 0.5) * 0.3;
+    smokePos.array[i * 3 + 1] = y + (Math.random() - 0.5) * 0.3;
+    smokePos.array[i * 3 + 2] = z + (Math.random() - 0.5) * 0.3;
+    const shade = 0.85 + Math.random() * 0.3;
+    smokeCol.array[i * 3] = colorTmp.r * shade;
+    smokeCol.array[i * 3 + 1] = colorTmp.g * shade;
+    smokeCol.array[i * 3 + 2] = colorTmp.b * shade;
+  }
+}
+
+/** A short warm dash caught mid-flight between muzzle and target. */
+export function tracer(x1, y1, z1, x2, y2, z2, colorHex = 0xffb347) {
+  const slot = tracerPool.find((s) => s.life <= 0) || tracerPool[0];
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dz = z2 - z1;
+  const len = Math.hypot(dx, dy, dz) || 1;
+  const frac = Math.min(0.32, 3.2 / len); // the dash spans at most ~3.2 m
+  const t0 = 0.35; // caught mid-flight, away from both ends
+  slot.mesh.position.set(x1 + dx * (t0 + frac / 2), y1 + dy * (t0 + frac / 2), z1 + dz * (t0 + frac / 2));
+  slot.mesh.lookAt(x2, y2, z2);
+  slot.mesh.scale.set(1, 1, len * frac);
+  slot.mesh.material.color.setHex(colorHex);
+  slot.mesh.visible = true;
+  slot.life = slot.maxLife;
+}
+
 export function muzzle(x, y, z, scale = 1) {
-  if (!_scene) return;
-  const key = 'star';
-  if (!_mats[key]) {
-    _mats[key] = new THREE.MeshBasicMaterial({
-      map: _starTex, transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide,
-    });
-  }
-  for (let i = 0; i < 2; i++) {
-    const m = obtain(_starGeo, _mats[key]);
-    m.position.set(x, y, z);
-    m.scale.setScalar(scale * (0.8 + Math.random() * 0.4));
-    m.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
-    spawn(m, 0, 0, 0, 0.055, {});
+  const slot = flashPool.find((s) => s.life <= 0) || flashPool[0];
+  slot.sprite.position.set(x, y, z);
+  slot.sprite.scale.set(0.55 * scale, 0.55 * scale, 1);
+  slot.sprite.material.rotation = Math.random() * Math.PI;
+  slot.sprite.visible = true;
+  slot.life = slot.maxLife;
+  if (flashLight) {
+    flashLight.position.set(x, y + 0.2, z);
+    flashLight.intensity = 2.2 * scale;
   }
 }
 
-// A spent casing: a tiny brass box that pops sideways and falls.
 export function casing(x, y, z, heading) {
-  if (!_scene) return;
-  const m = obtain(_boxGeo, colorMat(0xd8a83c, 1));
-  m.position.set(x, y, z);
-  m.scale.set(0.035, 0.035, 0.07);
+  const c = casings.find((k) => k.life <= 0) || casings[0];
+  c.x = x;
+  c.y = y;
+  c.z = z;
   const side = heading + Math.PI / 2;
-  spawn(m,
-    Math.sin(side) * (0.7 + Math.random() * 0.5),
-    1.4 + Math.random() * 0.6,
-    Math.cos(side) * (0.7 + Math.random() * 0.5),
-    0.55, { grav: -9, spin: 14 });
+  c.vx = Math.sin(side) * (0.8 + Math.random() * 0.7);
+  c.vz = Math.cos(side) * (0.8 + Math.random() * 0.7);
+  c.vy = 1.6 + Math.random() * 0.8;
+  c.rot = Math.random() * Math.PI;
+  c.vr = (Math.random() - 0.5) * 14;
+  c.life = 1.6;
 }
 
-// One call for a whole shot: flash at the muzzle, tracer down the line,
-// sparks and a breath of smoke where it lands.
+/** One full gunshot: flash + dash + casing + the locked smoke counts. */
 export function gunshotFx(x, y, z, tx, ty, tz, opts = {}) {
-  muzzle(x, y, z, opts.muzzleScale || 1);
-  tracer(x, y, z, tx, ty, tz, opts.tracerColor || 0xffb347);
-  casing(x, y - 0.08, z, opts.heading || 0);
-  if (opts.impact !== false) {
-    burst(tx, ty, tz, 0xffcf7a, 3, 1.4, {});
-    if (Math.random() < 0.5) burstSmoke(tx, ty + 0.1, tz, 1, { color: 0x99876c });
-  }
-  burstSmoke(x, y, z, 1, { color: 0x8a7f70 });
+  muzzle(x, y, z, opts.flashScale ?? 1);
+  tracer(x, y, z, tx, ty, tz, opts.color ?? 0xffb347);
+  if (opts.casing !== false) casing(x, y - 0.1, z, opts.heading ?? 0);
+  burstSmoke(x, y, z, 1, { color: 0x8a7f70, life: 1.1, rise: 0.55, power: 0.3 });
+  burstSmoke(tx, ty, tz, 2, { color: 0x99876c, life: 1.15, rise: 0.55, power: 0.5 });
+  burst(tx, ty, tz, 0xffcf7a, opts.sparks ?? 3, 1.6, { life: 0.4 });
 }
 
-// Explosions: fireball burst, a fast shockwave ring, dust and smoke column.
-const _ringGeo = new THREE.TorusGeometry(1, 0.09, 6, 26);
 export function explodeAt(x, z, radius = 7, sourceCar = null) {
-  if (!_scene) return;
-  const y = 0.7;
-  burst(x, y, z, 0xff8a30, 16, 6, { up: 1 });
-  burst(x, y, z, 0xffd23e, 10, 4.4, { up: 1.2 });
-  burst(x, y, z, 0x3a3a40, 8, 3.4, { up: 0.9 });
-  burstSmoke(x, y + 0.4, z, 7, { color: 0x5a5348 });
-  burstSmoke(x, y, z, 5, { color: 0x99876c });
-  const ring = obtain(_ringGeo, colorMat(0xffc37a, 0.8));
-  ring.position.set(x, 0.35, z);
-  ring.rotation.x = Math.PI / 2;
-  ring.scale.setScalar(0.5);
-  spawn(ring, 0, 0, 0, 0.4, { grow: radius * 3.2, opacity: 0.8 });
+  burst(x, 1.4, z, 0xffa63e, 46, 5, { life: 0.8 });
+  burst(x, 1.4, z, 0xff5a2e, 30, 3.4, { life: 0.6 });
+  burstSmoke(x, 1.6, z, 12, { color: 0x3a3a3a, life: 2.8, rise: 1.7, power: 1.7 });
+  burstSmoke(x, 1.2, z, 7, { color: 0x6e6e6e, life: 2.1, rise: 1.15, power: 2.3 });
+  muzzle(x, 1.5, z, 3.2);
 }
 
 export function updateEffects(dt) {
-  for (let i = _particles.length - 1; i >= 0; i--) {
-    const p = _particles[i];
+  for (let i = 0; i < SPARKS; i += 1) {
+    const p = sparkParts[i];
+    if (p.life <= 0) continue;
     p.life -= dt;
-    if (p.life <= 0) {
-      p.mesh.visible = false;
-      if (p.mesh.parent) p.mesh.parent.remove(p.mesh);
-      _pool.push(p.mesh);
-      _particles.splice(i, 1);
-      continue;
-    }
-    p.vy += p.grav * dt;
-    if (p.drag) {
-      const d = Math.max(0, 1 - p.drag * dt);
-      p.vx *= d; p.vy *= d; p.vz *= d;
-    }
-    p.mesh.position.x += p.vx * dt;
-    p.mesh.position.y += p.vy * dt;
-    p.mesh.position.z += p.vz * dt;
-    if (p.mesh.position.y < 0.03 && p.grav < 0) {
-      p.mesh.position.y = 0.03;
-      p.vy = 0; p.vx *= 0.7; p.vz *= 0.7;
-    }
-    if (p.spin) p.mesh.rotation.x += p.spin * dt, p.mesh.rotation.z += p.spin * 0.7 * dt;
-    if (p.grow) {
-      const s = p.mesh.scale.x + p.grow * dt * p.baseScale;
-      p.mesh.scale.set(s, p.mesh.geometry === _smokePlaneGeo ? s : p.mesh.scale.y, p.mesh.geometry === _ringGeo ? s : p.mesh.scale.z);
-      if (p.mesh.geometry === _ringGeo) p.mesh.scale.set(s, s, s);
-    }
-    const fade = clamp(p.life / p.maxLife, 0, 1);
-    if (p.mesh.material && p.mesh.material.transparent) {
-      p.mesh.material.opacity = p.baseOpacity * Math.min(1, fade * 2);
-    }
-    // Smoke always faces the camera.
-    if (p.mesh.geometry === _smokePlaneGeo && _scene && _scene.userData.camera) {
-      p.mesh.quaternion.copy(_scene.userData.camera.quaternion);
-    }
+    if (p.life <= 0) { sparkPos.array[i * 3 + 1] = -999; continue; }
+    p.vy -= p.grav * dt;
+    const d = Math.max(0, 1 - p.drag * dt);
+    p.vx *= d; p.vz *= d;
+    sparkPos.array[i * 3] += p.vx * dt;
+    sparkPos.array[i * 3 + 1] += p.vy * dt;
+    sparkPos.array[i * 3 + 2] += p.vz * dt;
+    if (sparkPos.array[i * 3 + 1] < 0.03) { sparkPos.array[i * 3 + 1] = 0.03; p.vy *= -0.4; }
   }
+  sparkPos.needsUpdate = true;
+  for (let i = 0; i < SMOKES; i += 1) {
+    const p = smokeParts[i];
+    if (p.life <= 0) continue;
+    p.life -= dt;
+    if (p.life <= 0) { smokePos.array[i * 3 + 1] = -999; continue; }
+    const d = Math.max(0, 1 - p.drag * dt);
+    p.vx *= d; p.vz *= d;
+    smokePos.array[i * 3] += p.vx * dt;
+    smokePos.array[i * 3 + 1] += p.vy * dt;
+    smokePos.array[i * 3 + 2] += p.vz * dt;
+  }
+  smokePos.needsUpdate = true;
+  for (const s of tracerPool) {
+    if (s.life <= 0) { s.mesh.visible = false; continue; }
+    s.life -= dt;
+    s.mesh.material.opacity = Math.max(0, s.life / s.maxLife) * 0.9;
+  }
+  for (const s of flashPool) {
+    if (s.life <= 0) { s.sprite.visible = false; continue; }
+    s.life -= dt;
+    s.sprite.material.opacity = Math.max(0, s.life / s.maxLife);
+  }
+  if (flashLight && flashLight.intensity > 0) flashLight.intensity = Math.max(0, flashLight.intensity - dt * 30);
+  casings.forEach((c, i) => {
+    if (c.life > 0) {
+      c.life -= dt;
+      c.vy -= 7 * dt;
+      c.x += c.vx * dt;
+      c.y += c.vy * dt;
+      c.z += c.vz * dt;
+      if (c.y < 0.04) { c.y = 0.04; c.vy *= -0.35; c.vx *= 0.6; c.vz *= 0.6; c.vr *= 0.5; }
+      c.rot += c.vr * dt;
+    }
+    casingObj.position.set(c.x, Math.max(c.y, -99 * (c.life <= 0 ? 1 : 0)), c.z);
+    if (c.life <= 0) casingObj.position.set(0, -99, 0);
+    casingObj.rotation.set(c.rot, c.rot * 0.7, 0);
+    casingObj.updateMatrix();
+    casingMesh.setMatrixAt(i, casingObj.matrix);
+  });
+  casingMesh.instanceMatrix.needsUpdate = true;
 }
