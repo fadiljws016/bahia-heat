@@ -1,317 +1,259 @@
-<!doctype html>
-<!-- Round seventeen: Bahia Heat rebuilt under the locked survey — the colonnade and its MARINA ALTA board stand at their pinned coordinates, and the map legend names the same eleven symbols. -->
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bahia Heat — Puerto Alba</title>
-<!-- Round five (final polish): the MARINA ALTA fascia is sized to sit
-     whole inside the cover frame, gun smoke runs warm grey instead of
-     white, and every staged shooter faces his target. The game below is
-     unchanged in structure: static files, no network, keyboard + mouse.
-     Round six: the fascia drops lower on the colonnade with headroom in
-     its lettering, so the orange roof trim no longer crosses the glyph
-     tops (the T of ALTA keeps its crossbar), and the combat screenshot's
-     lens moves to the runner's gun side so his aim reads in the frame.
-     Round seven: the combat screenshot is re-shot from the right — the
-     round-five composition mirrored — with the PAPD line re-spread so
-     every officer stands visible in the open and the staged volley
-     thinned so its smoke never covers them; the gunfire itself is
-     untouched.
-     Round eight: the chase screenshot finally shows FALCON-1 in full —
-     rotor, fuselage, tail and skids inside the frame over the
-     boulevard — and the combat screenshot fields a sixth PAPD officer
-     by the surrendering civilian, with the runner stepped out from
-     his cover car so his shotgun reads stock to muzzle. Staging only;
-     the game below is the same static files. -->
 <style>
-  :root {
-    --gold: #ffb340; --gold-soft: #ffcf6e; --ink: #0d141d; --glass: rgba(10, 16, 24, 0.78);
-    --glass-line: rgba(255, 207, 110, 0.35); --paper: #f4ede1; --red: #ff5347; --cyan: #57d7e8;
-  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #0d141d; }
-  body { font-family: "Segoe UI", system-ui, Arial, sans-serif; color: var(--paper);
-    /* A game page: drag-selecting HUD text mid-fight helps nobody. */
-    user-select: none; -webkit-user-select: none; }
-  #app, #app canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-  .hidden { display: none !important; }
-  #fade { position: fixed; inset: 0; background: #0d141d; pointer-events: none; transition: opacity 0.9s; z-index: 40; }
-  #damage-flash { position: fixed; inset: 0; pointer-events: none; z-index: 30; opacity: 0;
-    background: radial-gradient(ellipse at center, transparent 42%, rgba(200, 30, 20, 0.55) 100%); }
-
-  /* ---------------------------------------------------------- HUD frame */
-  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 20; }
-  .panel { background: var(--glass); border: 1px solid var(--glass-line); border-radius: 10px;
-    padding: 10px 12px; backdrop-filter: blur(3px); box-shadow: 0 4px 18px rgba(0,0,0,0.35); }
-
-  #mission-panel { position: absolute; top: 16px; left: 16px; width: 308px; }
-  #mission-title { font-size: 17px; font-weight: 800; letter-spacing: 0.4px; color: var(--gold-soft); }
-  #mission-stage { font-size: 11px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--cyan); margin: 2px 0 5px; }
-  #mission-objective { font-size: 14px; line-height: 1.35; }
-  #mission-next { font-size: 12px; color: #cfc6b2; margin-top: 5px; }
-  #mission-next b { color: var(--gold); letter-spacing: 1px; }
-  #mission-timer { margin-top: 7px; font-size: 21px; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; }
-  #mission-timer.low { color: var(--red); animation: pulse 0.7s infinite alternate; }
-  @keyframes pulse { from { opacity: 1; } to { opacity: 0.45; } }
-
-  #dispatch-panel { position: absolute; top: 16px; left: 340px; width: 218px; border-color: rgba(122, 176, 255, 0.4); }
-  #dispatch-panel .dp-head { font-size: 11px; font-weight: 800; letter-spacing: 1.8px; color: #7ab0ff; margin-bottom: 5px; }
-  #dispatch-list { list-style: none; font-size: 12.5px; line-height: 1.5; font-variant-numeric: tabular-nums; }
-  #dispatch-list .tactic { float: right; color: var(--gold-soft); font-weight: 700; font-size: 11px; letter-spacing: 0.6px; }
-  #dispatch-air { margin-top: 5px; font-size: 11px; font-weight: 800; letter-spacing: 1.2px; color: #fff; }
-
-  #top-right { position: absolute; top: 16px; right: 16px; text-align: right; }
-  #clock { font-size: 15px; font-weight: 700; color: #ffe9b0; font-variant-numeric: tabular-nums; }
-  #cash { font-size: 27px; font-weight: 900; color: #7be382; line-height: 1.1; }
-  #respect-line { font-size: 12px; color: #e8dfc8; letter-spacing: 0.4px; }
-  #wanted-stars { font-size: 24px; letter-spacing: 3px; color: rgba(255,255,255,0.22); margin-top: 2px; }
-  #wanted-stars .on { color: var(--gold); text-shadow: 0 0 9px rgba(255,179,64,0.8); }
-  #sight-state { font-size: 11px; font-weight: 800; letter-spacing: 1.6px; color: var(--red); }
-  #sight-state.searching { color: var(--gold-soft); }
-  #sight-state.lost { color: #9fd48a; }
-
-  #map-wrap { position: absolute; left: 16px; bottom: 16px; text-align: center; }
-  #minimap { width: 220px; height: 220px; border-radius: 50%; border: 2px solid rgba(255, 207, 110, 0.55);
-    box-shadow: 0 6px 22px rgba(0,0,0,0.5); background: #16202b; }
-  #location-label { margin-top: 5px; font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
-    color: #ffe9b0; opacity: 0; transition: opacity 0.4s; }
-  #location-label.show { opacity: 1; }
-
-  #bottom-right { position: absolute; right: 16px; bottom: 16px; width: 264px; display: flex; flex-direction: column; gap: 8px; }
-  #weapons { display: flex; gap: 6px; }
-  .slot { flex: 1; background: var(--glass); border: 1px solid rgba(255,255,255,0.18); border-radius: 8px;
-    padding: 5px 6px; font-size: 10px; position: relative; min-height: 62px; color: #9fb4c8; }
-  .slot .key { position: absolute; top: 3px; right: 5px; color: #9fb4c8; font-weight: 800; }
-  .slot .wicon { display: block; width: 46px; height: 18px; margin: 1px 0 3px; fill: currentColor; }
-  .slot .wname { display: block; font-weight: 700; font-size: 10.5px; line-height: 1.15; padding-right: 10px; color: var(--paper); }
-  .slot .ammo { display: block; margin-top: 3px; color: var(--gold-soft); font-weight: 800; font-size: 12px; }
-  .slot.active { border-color: var(--gold); box-shadow: 0 0 10px rgba(255,179,64,0.35); color: var(--gold-soft); }
-  .slot.locked { opacity: 0.45; }
-  .bar { height: 11px; border-radius: 6px; background: rgba(255,255,255,0.14); overflow: hidden; }
-  .bar > div { height: 100%; transition: width 0.15s; }
-  #health-fill { background: linear-gradient(90deg, #d8402e, #ff7a4d); }
-  #armor-fill { background: linear-gradient(90deg, #2f7fd0, #57d7e8); }
-  .bar-label { font-size: 10px; letter-spacing: 1.6px; font-weight: 800; color: #cfc6b2; margin: 2px 0 3px; }
-  #vehicle-info .panel { padding: 8px 12px; }
-  #speed { font-size: 25px; font-weight: 900; }
-  #speed small { font-size: 12px; color: #cfc6b2; }
-  #vehicle-name { font-size: 12.5px; font-weight: 700; color: var(--gold-soft); }
-  #condition-fill { background: linear-gradient(90deg, #e8a33c, #7be382); }
-  #radio-line { font-size: 11.5px; color: #b8e2ef; text-align: right; }
-  #radio-line b { color: #fff; }
-
-  #interact-prompt { position: absolute; left: 50%; bottom: 24%; transform: translateX(-50%);
-    background: var(--glass); border: 1px solid var(--glass-line); border-radius: 20px; padding: 7px 16px; font-size: 14px; }
-  #interact-prompt .key { display: inline-block; background: var(--gold); color: #221806; font-weight: 900;
-    border-radius: 5px; padding: 0 7px; margin-right: 8px; }
-  #hud-note { position: absolute; left: 50%; bottom: 31%; transform: translateX(-50%); font-size: 15px; font-weight: 700;
-    color: #ffd9d2; text-shadow: 0 2px 8px rgba(0,0,0,0.8); }
-  #bust-wrap { position: absolute; left: 50%; top: 19%; transform: translateX(-50%); width: 300px; text-align: center; }
-  #bust-wrap .bar-label { color: #ffb3ab; font-size: 12px; }
-  #bust-fill { background: linear-gradient(90deg, #ff8a3c, #ff2a1e); }
-
-  #dialogue { position: absolute; left: 50%; bottom: 5.5%; transform: translateX(-50%); width: min(680px, 92vw);
-    display: flex; gap: 12px; align-items: flex-start; }
-  #dlg-portrait { flex: 0 0 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-    font-weight: 900; font-size: 17px; color: #14202e; border: 2px solid rgba(255,255,255,0.5); }
-  #dlg-name { font-size: 13px; font-weight: 800; color: var(--gold-soft); letter-spacing: 0.4px; }
-  #dlg-text { font-size: 16.5px; line-height: 1.45; margin-top: 2px; }
-  #dialogue .hint { font-size: 11px; color: #9fb4c8; margin-top: 6px; letter-spacing: 1px; }
-
-  #toast { position: absolute; left: 50%; top: 12%; transform: translateX(-50%); background: var(--glass);
-    border: 1px solid var(--glass-line); border-radius: 8px; padding: 8px 18px; font-size: 14.5px; font-weight: 600;
-    opacity: 0; transition: opacity 0.3s; }
-  #toast.show { opacity: 1; }
-  #banner { position: absolute; left: 50%; top: 34%; transform: translateX(-50%); text-align: center;
-    opacity: 0; transition: opacity 0.35s; text-shadow: 0 4px 22px rgba(0,0,0,0.85); }
-  #banner.show { opacity: 1; }
-  #banner-big { font-size: 44px; font-weight: 900; letter-spacing: 1px; color: var(--gold-soft); text-transform: uppercase; }
-  #banner-sub { font-size: 16px; margin-top: 3px; }
-
-  #garage-panel { position: absolute; right: 16px; top: 34%; width: 238px; }
-  #garage-panel h3 { font-size: 13px; letter-spacing: 1.4px; color: var(--gold-soft); margin-bottom: 7px; }
-  #garage-panel li { list-style: none; font-size: 13px; line-height: 1.65; }
-  #garage-panel .key { display: inline-block; background: rgba(255,255,255,0.16); border-radius: 4px;
-    padding: 0 6px; font-weight: 800; margin-right: 6px; }
-  #garage-panel .price { float: right; color: #7be382; font-weight: 700; }
-
-  /* ---------------------------------------------------------- the big map */
-  #map-screen { position: fixed; inset: 0; z-index: 25; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; background: radial-gradient(ellipse at center, rgba(16, 24, 36, 0.82) 55%, rgba(5, 8, 13, 0.94) 100%);
-    opacity: 0; pointer-events: none; transition: opacity 0.22s; }
-  #map-screen.open { opacity: 1; }
-  #map-screen .map-head { width: 880px; display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; }
-  #map-screen .map-title { font-size: 26px; font-weight: 900; letter-spacing: 5px; color: #fff8ea; }
-  #map-district { font-size: 14px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: var(--gold-soft); }
-  #map-screen .map-hint { margin-left: auto; font-size: 12px; color: #9fb4c8; letter-spacing: 1px; }
-  #bigmap { border-radius: 12px; box-shadow: 0 18px 60px rgba(0,0,0,0.6); }
-  #map-screen .map-legend { width: 880px; margin-top: 8px; display: flex; gap: 8px 14px; flex-wrap: wrap;
-    background: var(--glass); border: 1px solid var(--glass-line); border-radius: 10px; padding: 6px 12px; font-size: 12px; }
-  .map-legend .sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
-  .map-legend .dia { transform: rotate(45deg); border-radius: 2px; }
-
-  /* ---------------------------------------------------------- menus */
-  .screen { position: fixed; inset: 0; z-index: 35; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; background: linear-gradient(180deg, rgba(10, 16, 26, 0.25), rgba(10, 16, 26, 0.78)); text-align: center; }
-  .screen h1 { font-size: 62px; font-weight: 900; letter-spacing: 2px; color: #fff8ea; text-shadow: 0 6px 30px rgba(0,0,0,0.7); }
-  .screen h1 .heat { color: var(--gold); }
-  .screen .tag { font-size: 16px; color: #ffe9b0; margin: 6px 0 26px; text-shadow: 0 2px 10px rgba(0,0,0,0.8); }
-  .screen button { pointer-events: auto; cursor: pointer; font: inherit; font-size: 16px; font-weight: 800; letter-spacing: 0.6px;
-    color: #221806; background: linear-gradient(180deg, var(--gold-soft), var(--gold)); border: 0; border-radius: 9px;
-    padding: 12px 34px; margin: 5px; box-shadow: 0 6px 18px rgba(0,0,0,0.4); }
-  .screen button.ghost { background: rgba(16, 24, 36, 0.85); color: var(--paper); border: 1px solid var(--glass-line); }
-  .screen button:disabled { opacity: 0.4; cursor: default; }
-  #end-title { font-size: 58px; font-weight: 900; letter-spacing: 3px; color: var(--red); text-transform: uppercase; }
-  #end-title.busted { color: #7ab0ff; }
-  #end-sub { font-size: 16px; color: #e8dfc8; margin: 8px 0 24px; }
-  #help-panel { margin-top: 18px; text-align: left; font-size: 13.5px; line-height: 1.75; }
-  #help-panel td { padding-right: 18px; }
-  #help-panel .k { font-weight: 800; color: var(--gold-soft); white-space: nowrap; }
-  body.shot .screen { display: none !important; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #10151d; }
+  body { font-family: system-ui, "Segoe UI", Roboto, sans-serif; color: #f2ead8; }
+  #game { position: fixed; inset: 0; }
+  #game canvas { display: block; }
+  .panel {
+    background: rgba(16, 21, 30, 0.82);
+    border: 1px solid rgba(255, 237, 194, 0.14);
+    border-radius: 10px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  }
+  /* Mission card, top-left */
+  #mission-panel { position: fixed; top: 14px; left: 14px; width: 300px; padding: 12px 14px; z-index: 5; }
+  #mission-title { font-size: 19px; font-weight: 800; color: #ffcf6e; letter-spacing: 0.02em; }
+  #mission-stage { font-size: 11px; font-weight: 700; color: #57d7e8; letter-spacing: 0.14em; margin-top: 2px; }
+  #mission-objective { font-size: 14px; margin-top: 6px; line-height: 1.35; }
+  #mission-next { font-size: 12px; color: #c9bda6; margin-top: 6px; }
+  #mission-next::first-letter { color: #ffb340; font-weight: 800; }
+  #mission-timer {
+    position: fixed; top: 158px; left: 14px; z-index: 5;
+    font-size: 30px; font-weight: 800; color: #ffffff;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); font-variant-numeric: tabular-nums;
+  }
+  /* PAPD dispatch, beside the mission card */
+  #dispatch-panel { position: fixed; top: 14px; left: 328px; width: 218px; padding: 10px 12px; z-index: 5; }
+  #dispatch-panel h3 { font-size: 11px; letter-spacing: 0.16em; color: #8fc3e8; margin-bottom: 6px; }
+  .drow { display: flex; justify-content: space-between; font-size: 12.5px; padding: 1.5px 0; font-variant-numeric: tabular-nums; }
+  .dunit { color: #e8e3d5; font-weight: 600; }
+  .ddist { color: #9fb2c4; }
+  .drole { color: #ffb340; font-weight: 700; font-size: 11px; letter-spacing: 0.06em; }
+  .dair { margin-top: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #ffd98a; line-height: 1.5; }
+  /* Top-right stack */
+  #top-right { position: fixed; top: 14px; right: 16px; text-align: right; z-index: 5; }
+  #clock { font-size: 13px; color: #ffe9b0; font-weight: 700; font-variant-numeric: tabular-nums; }
+  #cash { font-size: 27px; font-weight: 800; color: #57e88a; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45); }
+  #respect-line { font-size: 12.5px; color: #e8e3d5; }
+  #stars { font-size: 19px; color: #ffb340; letter-spacing: 0.12em; text-shadow: 0 1px 5px rgba(0, 0, 0, 0.5); }
+  #wanted-label { font-size: 11px; font-weight: 800; letter-spacing: 0.22em; color: #ff8a5e; }
+  /* Minimap, bottom-left */
+  #minimap-wrap { position: fixed; left: 16px; bottom: 16px; z-index: 5; text-align: center; }
+  #minimap {
+    width: 172px; height: 172px; border-radius: 50%;
+    border: 3px solid rgba(14, 19, 27, 0.85);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+    background: #20303c;
+  }
+  #district-caption {
+    margin-top: 5px; font-size: 12px; font-weight: 800; letter-spacing: 0.2em;
+    color: #ffe9b0; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+  }
+  /* Bottom-right: weapons, bars, radio */
+  #bottom-right { position: fixed; right: 16px; bottom: 16px; z-index: 5; width: 336px; }
+  #weapons { display: flex; gap: 6px; justify-content: flex-end; }
+  .wslot {
+    width: 79px; padding: 6px 7px 5px; border-radius: 8px; position: relative;
+    background: rgba(16, 21, 30, 0.82); border: 1px solid rgba(255, 237, 194, 0.14);
+  }
+  .wslot.active { border-color: #ffb340; box-shadow: 0 0 0 1px #ffb340 inset; }
+  .wslot.locked { opacity: 0.55; }
+  .wkey { position: absolute; top: 3px; right: 6px; font-size: 10px; color: #9fb2c4; }
+  .wicon { height: 22px; display: flex; align-items: center; }
+  .wicon svg { display: block; }
+  .wname { font-size: 11px; font-weight: 700; line-height: 1.15; min-height: 25px; }
+  .wammo { font-size: 12px; font-weight: 800; color: #ffd98a; }
+  .wslot.locked .wammo { color: #ff9a7a; font-size: 10px; letter-spacing: 0.08em; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+  .bar-label { font-size: 10px; font-weight: 800; letter-spacing: 0.14em; color: #c9bda6; width: 52px; text-align: right; }
+  .bar { flex: 1; height: 9px; border-radius: 5px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 5px; transition: width 0.2s; }
+  #health-fill { background: linear-gradient(90deg, #e0482e, #ff7a4d); width: 100%; }
+  #armor-fill { background: linear-gradient(90deg, #57b6e8, #8fd3f4); width: 0%; }
+  #radio-line { margin-top: 7px; font-size: 11.5px; color: #9fb2c4; text-align: right; }
+  #radio-line b { color: #e8e3d5; }
+  /* Speedo */
+  #speedo {
+    position: fixed; right: 16px; bottom: 178px; z-index: 5; width: 190px;
+    padding: 10px 14px; text-align: right;
+  }
+  #speed-val { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  #speedo .unit { font-size: 13px; color: #9fb2c4; font-weight: 700; }
+  #car-name { font-size: 13px; font-weight: 700; color: #ffd98a; }
+  #speedo .bar-label { width: auto; text-align: right; }
+  #speedo .bar-row { margin-top: 4px; }
+  #condition-fill { background: linear-gradient(90deg, #ffb340, #57e88a); width: 100%; }
+  /* Dialogue */
+  #dialogue {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    width: 660px; max-width: 92vw; padding: 14px 18px 12px 74px; z-index: 6;
+  }
+  #dlg-avatar {
+    position: absolute; left: 14px; top: 14px; width: 46px; height: 46px; border-radius: 50%;
+    background: #c23b2e; color: #ffe9b0; font-weight: 800; font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #dlg-name { font-size: 13.5px; font-weight: 800; color: #ffcf6e; }
+  #dlg-text { font-size: 14.5px; line-height: 1.45; margin-top: 3px; }
+  #dlg-hint { font-size: 10.5px; letter-spacing: 0.14em; color: #9fb2c4; margin-top: 7px; font-weight: 700; }
+  /* Interact prompt */
+  #interact {
+    position: fixed; left: 50%; bottom: 118px; transform: translateX(-50%); z-index: 5;
+    padding: 7px 16px; font-size: 13px; font-weight: 800; letter-spacing: 0.1em;
+  }
+  /* Garage panel */
+  #garage-panel {
+    position: fixed; right: 16px; top: 150px; width: 250px; padding: 12px 14px; z-index: 5;
+    font-size: 13px; line-height: 1.5;
+  }
+  #garage-panel h3 { color: #ffcf6e; font-size: 13px; letter-spacing: 0.1em; margin-bottom: 4px; }
+  /* Big map overlay */
+  #bigmap-wrap {
+    position: fixed; inset: 0; z-index: 8; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(8, 12, 18, 0.66);
+  }
+  #bigmap-card { padding: 16px 20px 12px; max-width: 96vw; }
+  #bigmap-head { display: flex; align-items: baseline; gap: 18px; margin-bottom: 8px; }
+  #bigmap-head h1 { font-size: 25px; letter-spacing: 0.3em; font-weight: 800; color: #ffffff; }
+  #bigmap-district { font-size: 14px; letter-spacing: 0.24em; font-weight: 800; color: #ffb340; }
+  #bigmap-close { margin-left: auto; font-size: 11.5px; letter-spacing: 0.14em; color: #9fb2c4; font-weight: 700; }
+  #bigmap { display: block; width: min(72vh, 640px); height: min(72vh, 640px); border-radius: 8px; }
+  #legend { display: flex; flex-wrap: wrap; gap: 5px 16px; margin-top: 10px; font-size: 12px; color: #d8cfc0; max-width: 660px; }
+  #legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .lg { width: 13px; height: 13px; border-radius: 3px; display: inline-block; text-align: center; font-size: 10px; font-weight: 800; line-height: 13px; color: #141a22; }
+  .lg-dot { border-radius: 50%; }
+  .lg-line { height: 4px; border-radius: 2px; }
+  /* Start / over screens */
+  .screen {
+    position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: radial-gradient(ellipse at 50% 65%, rgba(240, 140, 70, 0.25), rgba(10, 14, 22, 0.88) 70%);
+    cursor: pointer;
+  }
+  .screen h1 { font-size: 54px; letter-spacing: 0.18em; font-weight: 900; color: #ffedc2; text-shadow: 0 4px 24px rgba(0,0,0,0.6); }
+  .screen h2 { font-size: 17px; letter-spacing: 0.3em; color: #ffb340; font-weight: 800; margin-top: 4px; }
+  .screen p { margin-top: 18px; font-size: 14.5px; color: #d8cfc0; line-height: 1.65; max-width: 520px; }
+  .screen .go { margin-top: 26px; font-size: 13px; font-weight: 800; letter-spacing: 0.2em; color: #57d7e8; }
+  #over-screen { display: none; cursor: default; }
+  #over-button {
+    margin-top: 22px; padding: 10px 26px; border-radius: 8px; border: 1px solid #ffb340;
+    background: rgba(255, 179, 64, 0.14); color: #ffedc2; font-weight: 800; letter-spacing: 0.14em; cursor: pointer;
+  }
 </style>
 </head>
 <body>
-<div id="app"></div>
-<div id="damage-flash"></div>
+<div id="game"></div>
 
-<div id="hud" class="hidden">
-  <div id="mission-panel" class="panel">
-    <div id="mission-title">Bahia Heat</div>
-    <div id="mission-stage"></div>
-    <div id="mission-objective"></div>
-    <div id="mission-next"></div>
-    <div id="mission-timer" class="hidden"></div>
-  </div>
+<!-- Mission card -->
+<div id="mission-panel" class="panel" style="display:none">
+  <div id="mission-title"></div>
+  <div id="mission-stage"></div>
+  <div id="mission-objective"></div>
+  <div id="mission-next"></div>
+</div>
+<div id="mission-timer" style="display:none"></div>
 
-  <div id="dispatch-panel" class="panel hidden">
-    <div class="dp-head">PAPD DISPATCH</div>
-    <ul id="dispatch-list"></ul>
-    <div id="dispatch-air"></div>
-  </div>
+<!-- PAPD dispatch -->
+<div id="dispatch-panel" class="panel" style="display:none">
+  <h3>PAPD DISPATCH</h3>
+  <div id="dispatch-rows"></div>
+</div>
 
-  <div id="top-right">
-    <div id="clock">17:12</div>
-    <div id="cash">$0</div>
-    <div id="respect-line"></div>
-    <div id="wanted-stars"></div>
-    <div id="sight-state" class="hidden"></div>
-  </div>
+<!-- Top-right stack -->
+<div id="top-right">
+  <div id="clock"></div>
+  <div id="cash">$0</div>
+  <div id="respect-line"></div>
+  <div id="stars"></div>
+  <div id="wanted-label" style="display:none"></div>
+</div>
 
-  <div id="map-wrap">
-    <canvas id="minimap" width="220" height="220"></canvas>
-    <div id="location-label"></div>
-  </div>
+<!-- Minimap -->
+<div id="minimap-wrap">
+  <canvas id="minimap" width="200" height="200"></canvas>
+  <div id="district-caption"></div>
+</div>
 
-  <div id="bottom-right">
-    <div id="weapons"></div>
-    <div>
-      <div class="bar-label">HEALTH</div>
-      <div class="bar"><div id="health-fill"></div></div>
-      <div class="bar-label">ARMOR</div>
-      <div class="bar"><div id="armor-fill"></div></div>
+<!-- Weapons, bars, radio -->
+<div id="bottom-right">
+  <div id="weapons"></div>
+  <div class="bar-row"><div class="bar-label">HEALTH</div><div class="bar"><div id="health-fill"></div></div></div>
+  <div class="bar-row"><div class="bar-label">ARMOR</div><div class="bar"><div id="armor-fill"></div></div></div>
+  <div id="radio-line"></div>
+</div>
+
+<!-- Speedo -->
+<div id="speedo" class="panel" style="display:none">
+  <div><span id="speed-val">0</span> <span class="unit">km/h</span></div>
+  <div id="car-name"></div>
+  <div class="bar-row"><div class="bar-label">CONDITION</div><div class="bar"><div id="condition-fill"></div></div></div>
+</div>
+
+<!-- Dialogue -->
+<div id="dialogue" class="panel" style="display:none">
+  <div id="dlg-avatar">MQ</div>
+  <div id="dlg-name"></div>
+  <div id="dlg-text"></div>
+  <div id="dlg-hint">E — CONTINUE</div>
+</div>
+
+<div id="interact" class="panel" style="display:none"></div>
+
+<!-- Garage panel -->
+<div id="garage-panel" class="panel" style="display:none">
+  <h3>DARIO'S GARAGE</h3>
+  <div>Respray · Repair · Lay low.<br>Walk to a car and press E to drive.<br>Heat fades faster off the boulevard.</div>
+</div>
+
+<!-- Big map -->
+<div id="bigmap-wrap">
+  <div id="bigmap-card" class="panel">
+    <div id="bigmap-head">
+      <h1>PUERTO ALBA</h1>
+      <div id="bigmap-district"></div>
+      <div id="bigmap-close">M / ESC — CLOSE</div>
     </div>
-    <div id="vehicle-info" class="hidden">
-      <div class="panel">
-        <div id="speed">0 <small>km/h</small></div>
-        <div id="vehicle-name"></div>
-        <div class="bar-label">CONDITION</div>
-        <div class="bar"><div id="condition-fill"></div></div>
-      </div>
+    <canvas id="bigmap" width="760" height="760"></canvas>
+    <div id="legend">
+      <span><i class="lg" style="background:#ffb340">◆</i> Objective</span>
+      <span><i class="lg lg-line" style="background:#ffb340;width:18px"></i> Route</span>
+      <span><i class="lg" style="background:#5a6a76;color:#fff">G</i> Garage</span>
+      <span><i class="lg lg-dot" style="background:#e8a33c;color:#3a2a05">M</i> Marisol</span>
+      <span><i class="lg" style="background:#20303c;color:#fff">⚑</i> Race start</span>
+      <span><i class="lg" style="background:#274b63;color:#ffd23e">P</i> PAPD station</span>
+      <span><i class="lg" style="background:#fff;color:#d8402e">+</i> Hospital</span>
+      <span><i class="lg" style="background:#f4f1e8;color:#c23b2e">▲</i> Lighthouse</span>
+      <span><i class="lg" style="background:#7fb8d8;color:#20506e">⚓</i> Marina docks</span>
+      <span><i class="lg lg-dot" style="background:#e0482e"></i> Police</span>
+      <span><i class="lg" style="background:#fff;color:#20303c">➤</i> FALCON-1 / You</span>
     </div>
-    <div id="radio-line"></div>
-  </div>
-
-  <div id="interact-prompt" class="hidden"><span class="key">E</span><span id="interact-text"></span></div>
-  <div id="hud-note" class="hidden"></div>
-  <div id="bust-wrap" class="hidden">
-    <div class="bar-label">BUSTED</div>
-    <div class="bar"><div id="bust-fill"></div></div>
-  </div>
-
-  <div id="dialogue" class="panel hidden">
-    <div id="dlg-portrait">MQ</div>
-    <div>
-      <div id="dlg-name"></div>
-      <div id="dlg-text"></div>
-      <div class="hint">E — CONTINUE</div>
-    </div>
-  </div>
-
-  <div id="toast"></div>
-  <div id="banner"><div id="banner-big"></div><div id="banner-sub"></div></div>
-
-  <div id="garage-panel" class="panel hidden">
-    <h3>DARIO'S GARAGE</h3>
-    <ul>
-      <li><span class="key">1</span>Repair &amp; tires <span class="price">$150</span></li>
-      <li><span class="key">2</span>Respray — lose the heat <span class="price">$300</span></li>
-      <li><span class="key">3</span>Engine tune <span class="price">$800</span></li>
-      <li><span class="key">4</span>Armor plating <span class="price">$800</span></li>
-    </ul>
   </div>
 </div>
 
-<div id="map-screen" class="hidden">
-  <div class="map-head">
-    <span class="map-title">PUERTO ALBA</span>
-    <span id="map-district">Marina Alta</span>
-    <span class="map-hint">M / ESC — CLOSE</span>
-  </div>
-  <canvas id="bigmap" width="880" height="620"></canvas>
-  <div class="map-legend">
-    <span><span class="sw dia" style="background:#ffb340"></span>Objective</span>
-    <span><span class="sw" style="background:#ffb340"></span>Route</span>
-    <span><span class="sw" style="background:#e8862e;border-radius:50%"></span>Garage</span>
-    <span><span class="sw" style="background:#ffb340;border-radius:50%"></span>Marisol</span>
-    <span><span class="sw" style="background:repeating-conic-gradient(#20242a 0% 25%, #ffffff 0% 50%) 0 0/7px 7px"></span>Race start</span>
-    <span><span class="sw" style="background:#2b4a73"></span>PAPD station</span>
-    <span><span class="sw" style="background:#f2f4f4"></span>Hospital</span>
-    <span><span class="sw" style="background:linear-gradient(180deg, #d8402e 30%, #ffffff 30%, #ffffff 62%, #d8402e 62%)"></span>Lighthouse</span>
-    <span><span class="sw" style="background:#175d7a;border-radius:50%"></span>Marina docks</span>
-    <span><span class="sw" style="background:#ff3b30;border-radius:50%"></span>Police</span>
-    <span><span class="sw" style="background:#ffffff"></span>FALCON-1 / You</span>
-  </div>
-</div>
-
+<!-- Start screen -->
 <div id="start-screen" class="screen">
-  <h1>BAHIA <span class="heat">HEAT</span></h1>
-  <div class="tag">Puerto Alba is awake, runner. Marisol is waiting on the corner.</div>
-  <div>
-    <button id="btn-new">New Game</button>
-    <button id="btn-continue">Continue</button>
-    <button id="btn-help" class="ghost">How to Play</button>
-  </div>
-  <div id="help-panel" class="panel hidden">
-    <table>
-      <tr><td class="k">W A S D / arrows</td><td>Walk / drive</td><td class="k">Mouse</td><td>Orbit camera (click the game to lock)</td></tr>
-      <tr><td class="k">Click / J</td><td>Punch or fire</td><td class="k">E</td><td>Enter / exit a car · continue dialogue</td></tr>
-      <tr><td class="k">1 – 4 / wheel</td><td>Weapon slots (garage services at Dario's)</td><td class="k">Shift</td><td>Sprint</td></tr>
-      <tr><td class="k">Space</td><td>Handbrake</td><td class="k">M</td><td>City map</td></tr>
-      <tr><td class="k">R</td><td>Change radio station</td><td class="k">N</td><td>Mute</td></tr>
-      <tr><td class="k">Esc / P</td><td>Pause</td><td class="k">Ctrl (aiming)</td><td>Crouch behind cover</td></tr>
-    </table>
-  </div>
+  <h1>BAHIA HEAT</h1>
+  <h2>PUERTO ALBA</h2>
+  <p>Golden hour over the bay. Marisol "La Jefa" Quintana has work for a driver
+     with nerve: eight jobs, one wanted level, and the PAPD's FALCON-1 watching
+     from above. Run the city, build the name, own the port.</p>
+  <p>WASD drive &amp; move · Mouse aim · Click shoot · E enter / talk · M map · C radio · N mute</p>
+  <div class="go">CLICK TO PLAY</div>
 </div>
 
-<div id="pause-screen" class="screen hidden">
-  <h1>Paused</h1>
-  <div class="tag">The port holds its breath.</div>
-  <div>
-    <button id="btn-resume">Resume</button>
-    <button id="btn-map" class="ghost">City Map</button>
-    <button id="btn-restart" class="ghost">Restart Job</button>
-    <button id="btn-quit" class="ghost">Quit to Title</button>
-  </div>
+<!-- Game over -->
+<div id="over-screen" class="screen">
+  <h1 id="over-title">WASTED</h1>
+  <p>The bay keeps what it catches. Puerto Alba will still be there at dawn.</p>
+  <button id="over-button">RUN IT AGAIN</button>
 </div>
-
-<div id="end-screen" class="screen hidden">
-  <div id="end-title">Wasted</div>
-  <div id="end-sub"></div>
-  <button id="btn-respawn">Get Back Up</button>
-</div>
-
-<div id="fade"></div>
 
 <script src="vendor/three.min.js"></script>
 <script type="module" src="src/main.js"></script>

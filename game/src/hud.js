@@ -1,217 +1,183 @@
-// Round seventeen: the panel reads missionPanelInfo's { title, stage, objective, next, timer } from the rebuilt engine in the same shape as before.
-// hud.js — every DOM element over the canvas: mission panel, PAPD dispatch
-// board, wanted stars, weapon slots, vitals, vehicle readout, radio line,
-// dialogue box, toasts, banners, the bust meter, and the full-screen map's
-// header district. Systems write into G; this file paints. Round
-// eight paints nothing new either: the dispatch board already lists
-// every foot officer by distance, so the sixth man the staging adds
-// to the Palma Showdown simply takes his own FOOT line on the board,
-// and FALCON-1's AIR SUPPORT line already names the unit the chase
-// frame now shows in full. Round six
-// paints nothing new: the dispatch board and weapon slots carry into the
-// combat shot's new framing unchanged, and the cover's district label
-// still names the quarter the (now lower) fascia signs.
-//
-// Round three draws the arsenal: each weapon slot carries a side-profile
-// silhouette of its gun — the P-9's short slide, the Kobra's long magazine
-// and stock, the Muelle's thick barrel and pump — so the loadout reads at
-// a glance the way the modelled weapons read in the world.
-//
-// Round five changes nothing here: the dispatch board already reports
-// what the facing audit measured — FOOT units, their distances, ENGAGING.
+// hud.js — every panel the screenshots are judged by: mission card,
+// PAPD dispatch, cash/respect/stars, weapon slots, health and armour,
+// the radio line, the dialogue box, the speedo and the district caption.
+// buildHud caches the DOM once; updateHud writes only what changed.
 
-// Round seven is judged partly through this file's dispatch board:
-// the re-spread PAPD line now reports at 7 / 12 / 18 m beside the RAM
-// unit in the combat frame. Same panel, truer distances — no paint
-// changed.
-import { G, rankFor } from './state.js';
-import { formatDayTime, formatClock, clamp } from './util.js';
+import { G } from './state.js';
+import { RANKS } from './state.js';
+import { formatClock, formatDayTime, clamp } from './util.js';
 import { missionPanelInfo } from './missions.js';
 import { dispatchInfo } from './police.js';
 import { WEAPONS, SLOT_ORDER } from './combat.js';
-import { CHARACTERS } from './story.js';
+import { currentStation } from './audio.js';
 import { districtAt } from './city.js';
-import { currentStation, isMuted } from './audio.js';
 
-const $ = (id) => document.getElementById(id);
-const els = {};
-let built = false;
-let lastDistrict = '';
-let districtTimer = 0;
-let toastTimer = 0;
-let bannerTimer = 0;
-const cache = {};
+const el = {};
+const last = {};
+let _weaponSig = '';
 
-function setText(id, text) {
-  if (cache[id] !== text) { cache[id] = text; els[id].textContent = text; }
+function $(id) { return document.getElementById(id); }
+
+function setText(id, value) {
+  if (last[id] === value) return;
+  last[id] = value;
+  if (el[id]) el[id].textContent = value;
 }
-function setHtml(id, html) {
-  if (cache[id] !== html) { cache[id] = html; els[id].innerHTML = html; }
-}
-function show(id, on) {
+
+function setShow(id, on) {
   const key = `show:${id}`;
-  if (cache[key] !== on) { cache[key] = on; els[id].classList.toggle('hidden', !on); }
+  if (last[key] === on) return;
+  last[key] = on;
+  if (el[id]) el[id].style.display = on ? '' : 'none';
 }
 
-// Side-profile silhouettes on a 64×24 grid, barrels to the right — drawn
-// from the same proportions as the modelled weapons in people.js.
-const WEAPON_ICONS = {
-  fists: '<circle cx="15" cy="10" r="3.6"/><circle cx="22.5" cy="8.4" r="3.9"/><circle cx="30" cy="8.4" r="3.9"/><circle cx="37" cy="10" r="3.6"/><path d="M11 13 h30 v4 q0 5-6 5 h-18 q-6 0-6-5 z"/>',
-  pistol: '<rect x="8" y="7" width="30" height="4.2"/><rect x="38" y="8.2" width="4" height="3"/><rect x="10" y="11.2" width="24" height="2.8"/><path d="M19 14 h8 l-1.6 7.4 q-.2 1.6-2 1.6 h-4.6 q-1.8 0-1.5-1.8 z"/><rect x="29" y="13.4" width="6" height="2"/>',
-  smg: '<rect x="14" y="8" width="30" height="5"/><rect x="44" y="9.6" width="15" height="2.6"/><rect x="55" y="6.4" width="2.2" height="3.4"/><path d="M28 13 h7.4 l-.8 8.2 q-.2 1.8-2 1.8 h-3.4 q-1.9 0-1.8-1.9 z"/><path d="M18.6 13 h6.8 l-1.2 6.6 q-.3 1.4-1.8 1.4 h-3.6 q-1.7 0-1.4-1.7 z"/><rect x="1.6" y="8.6" width="12.4" height="4"/><rect x="40" y="12.6" width="3.4" height="5"/>',
-  shotgun: '<rect x="16" y="7.4" width="43" height="4.2"/><rect x="21" y="11.8" width="29" height="2.6"/><rect x="30" y="11.2" width="9.4" height="4.8" rx="1"/><rect x="8" y="8" width="12" height="6.4"/><path d="M8.6 8.8 L1 10.4 L2.6 17.4 L9.4 14.6 Z"/><circle cx="56.6" cy="6.4" r="1.3"/>',
-};
+function setBar(id, frac) {
+  const key = `bar:${id}`;
+  const v = Math.round(frac * 200);
+  if (last[key] === v) return;
+  last[key] = v;
+  if (el[id]) el[id].style.width = `${clamp(frac, 0, 1) * 100}%`;
+}
 
 export function buildHud() {
-  for (const id of ['hud', 'mission-panel', 'mission-title', 'mission-stage', 'mission-objective', 'mission-next',
-    'mission-timer', 'dispatch-panel', 'dispatch-list', 'dispatch-air', 'clock', 'cash', 'respect-line',
-    'wanted-stars', 'sight-state', 'weapons', 'health-fill', 'armor-fill', 'vehicle-info', 'speed',
-    'vehicle-name', 'condition-fill', 'radio-line', 'dialogue', 'dlg-portrait', 'dlg-name', 'dlg-text',
-    'interact-prompt', 'interact-text', 'toast', 'banner', 'banner-big', 'banner-sub', 'location-label',
-    'damage-flash', 'garage-panel', 'bust-wrap', 'bust-fill', 'hud-note', 'map-district']) els[id] = $(id);
+  const ids = [
+    'mission-panel', 'mission-title', 'mission-stage', 'mission-objective', 'mission-next', 'mission-timer',
+    'dispatch-panel', 'dispatch-rows', 'clock', 'cash', 'respect-line', 'stars',
+    'weapons', 'health-fill', 'armor-fill', 'radio-line',
+    'dialogue', 'dlg-name', 'dlg-text', 'speedo', 'speed-val', 'car-name', 'condition-fill',
+    'district-caption', 'interact', 'garage-panel', 'wanted-label',
+  ];
+  for (const id of ids) el[id] = $(id);
+  // Weapon slots are built once; updateHud only repaints their state.
+  if (el.weapons) {
+    el.weapons.innerHTML = '';
+    SLOT_ORDER.forEach((key, i) => {
+      const w = WEAPONS[key];
+      const slot = document.createElement('div');
+      slot.className = 'wslot';
+      slot.id = `wslot-${key}`;
+      slot.innerHTML = `<div class="wkey">${i + 1}</div><div class="wicon">${weaponGlyph(key)}</div>` +
+        `<div class="wname">${w.name}</div><div class="wammo"></div>`;
+      el.weapons.appendChild(slot);
+    });
+  }
+}
 
-  // Weapon slots, built once — silhouette first, then name and ammo.
-  els.weapons.innerHTML = SLOT_ORDER.map((key, i) => {
-    const w = WEAPONS[key];
-    return `<div class="slot" id="slot-${key}"><span class="key">${i + 1}</span><svg class="wicon" viewBox="0 0 64 24" aria-hidden="true">${WEAPON_ICONS[key]}</svg><span class="wname">${w.name}</span><span class="ammo" id="ammo-${key}">—</span></div>`;
-  }).join('');
-  for (const key of SLOT_ORDER) { els[`slot-${key}`] = $(`slot-${key}`); els[`ammo-${key}`] = $(`ammo-${key}`); }
-  built = true;
+// Tiny inline-SVG weapon silhouettes — they render identically everywhere,
+// unlike emoji, which some systems draw as empty boxes.
+function weaponGlyph(key) {
+  const fill = '#e8e3d5';
+  if (key === 'fists') {
+    return `<svg width="30" height="20" viewBox="0 0 30 20"><g fill="${fill}">` +
+      '<rect x="3" y="6" width="5" height="9" rx="2"/><rect x="9" y="3" width="5" height="12" rx="2"/>' +
+      '<rect x="15" y="4" width="5" height="11" rx="2"/><rect x="21" y="7" width="5" height="8" rx="2"/></g></svg>';
+  }
+  if (key === 'pistol') {
+    return `<svg width="34" height="20" viewBox="0 0 34 20"><g fill="${fill}">` +
+      '<rect x="2" y="5" width="24" height="5" rx="1"/><rect x="20" y="3" width="6" height="4"/>' +
+      '<rect x="6" y="9" width="6" height="10" rx="1" transform="rotate(12 9 9)"/></g></svg>';
+  }
+  if (key === 'smg') {
+    return `<svg width="40" height="20" viewBox="0 0 40 20"><g fill="${fill}">` +
+      '<rect x="2" y="6" width="30" height="5" rx="1"/><rect x="32" y="7" width="7" height="3"/>' +
+      '<rect x="16" y="10" width="5" height="9"/><rect x="5" y="9" width="5" height="7" rx="1"/></g></svg>';
+  }
+  return `<svg width="44" height="20" viewBox="0 0 44 20"><g fill="${fill}">` +
+    '<rect x="10" y="7" width="33" height="4" rx="2"/><rect x="14" y="10" width="9" height="4" rx="1"/>' +
+    '<path d="M1 6 L11 6 L11 12 L3 13 Z"/></g></svg>';
 }
 
 export function setInteract(text) {
-  if (text) { setText('interact-text', text); show('interact-prompt', true); }
-  else show('interact-prompt', false);
+  G.interactText = text || '';
 }
 
-export function showGaragePanel(on) { show('garage-panel', on); }
+export function showGaragePanel(on) { G.garageOpen = on; }
+
+function updateWeapons() {
+  const sig = SLOT_ORDER.map((k) => `${G.unlocked[k] ? 1 : 0}:${G.ammo[k] || 0}:${G.weapon === k ? 1 : 0}`).join('|');
+  if (sig === _weaponSig) return;
+  _weaponSig = sig;
+  for (const key of SLOT_ORDER) {
+    const slot = el[`wslot-${key}`] || $(`wslot-${key}`);
+    if (!slot) continue;
+    el[`wslot-${key}`] = slot;
+    slot.classList.toggle('active', G.weapon === key);
+    slot.classList.toggle('locked', !G.unlocked[key]);
+    const ammo = slot.querySelector('.wammo');
+    if (ammo) ammo.textContent = !G.unlocked[key] ? 'LOCKED' : key === 'fists' ? '∞' : String(G.ammo[key] || 0);
+  }
+}
+
+function updateDispatch() {
+  const rows = (G.wanted > 0.3 || G.shotMode) ? dispatchInfo() : [];
+  setShow('dispatch-panel', rows.length > 0);
+  if (!rows.length) return;
+  const sig = rows.map((r) => `${r.label}${r.dist}${r.role}`).join('|');
+  if (last.dispatchSig === sig) return;
+  last.dispatchSig = sig;
+  if (el['dispatch-rows']) {
+    el['dispatch-rows'].innerHTML = rows.map((r) =>
+      `<div class="drow"><span class="dunit">${r.label}${r.label === 'FOOT' ? '' : ''}</span>` +
+      `<span class="ddist">${r.dist} m</span><span class="drole">${r.role}</span></div>`).join('') +
+      (G.heliSeesPlayer || G.wanted >= 2 ? '<div class="dair">FALCON-1 · AIR SUPPORT<br>ACTIVE</div>' : '');
+  }
+}
 
 export function updateHud(dt) {
-  if (!built) return;
-  const p = G.player;
-  const inGame = G.mode === 'playing' || G.mode === 'paused' || !!G.shotMode;
-  show('hud', inGame);
-  if (!inGame) return;
-
-  // Mission panel.
+  if (!el['mission-panel']) return;
+  // Mission card.
   const info = missionPanelInfo();
-  show('mission-panel', true);
-  setText('mission-title', info.title);
-  setText('mission-stage', info.stage);
-  setText('mission-objective', info.objective);
-  setHtml('mission-next', `<b>NEXT</b> ${info.next}`);
-  if (info.timer != null) {
-    show('mission-timer', true);
-    setText('mission-timer', formatClock(info.timer));
-    els['mission-timer'].classList.toggle('low', info.timer < 20);
-  } else show('mission-timer', false);
-
-  // Dispatch board.
-  const units = dispatchInfo();
-  const showDispatch = G.wanted >= 1 || units.length > 0;
-  show('dispatch-panel', showDispatch);
-  if (showDispatch) {
-    setHtml('dispatch-list', units.map((u) => `<li>${u.label} · ${u.d} m <span class="tactic">${u.tactic}</span></li>`).join(''));
-    setText('dispatch-air', G.heli?.active ? 'FALCON-1 · AIR SUPPORT ACTIVE' : '');
-    show('dispatch-air', !!G.heli?.active);
+  setShow('mission-panel', !!info && !G.mapOpen);
+  if (info) {
+    setText('mission-title', info.title);
+    setText('mission-stage', info.stage);
+    setText('mission-objective', info.objective);
+    setText('mission-next', `NEXT ${info.next}`);
+    const hasTimer = info.timer !== null && info.timer !== undefined;
+    setShow('mission-timer', hasTimer);
+    if (hasTimer) setText('mission-timer', formatClock(info.timer));
   }
-
+  updateDispatch();
   // Top-right stack.
   setText('clock', formatDayTime(G.timeHours));
-  setText('cash', `$${Math.floor(G.cash)}`);
-  const rank = rankFor(G.respect);
-  setText('respect-line', `${rank.name} · Respect ${Math.floor(G.respect)}`);
-  const stars = Math.floor(G.wanted);
-  let starHtml = '';
-  for (let i = 0; i < 5; i += 1) starHtml += `<span class="${i < stars ? 'on' : ''}">★</span>`;
-  setHtml('wanted-stars', starHtml);
-  if (G.wanted > 0) {
-    show('sight-state', true);
-    const label = G.sightState === 'insight' ? 'IN SIGHT' : G.sightState === 'searching' ? 'SEARCHING' : 'LOSING THEM';
-    setText('sight-state', label);
-    // Setting className wipes the element's classes wholesale — the id is
-    // not a class and survives it, so it needs no re-stamping each frame.
-    els['sight-state'].className = G.sightState === 'searching' ? 'searching' : G.sightState === 'lost' ? 'lost' : '';
-  } else show('sight-state', false);
-
-  // Weapon slots.
-  for (const key of SLOT_ORDER) {
-    const slot = els[`slot-${key}`];
-    slot.classList.toggle('active', G.currentWeapon === key);
-    slot.classList.toggle('locked', !G.unlockedWeapons.includes(key));
-    const w = WEAPONS[key];
-    setText(`ammo-${key}`, !G.unlockedWeapons.includes(key) ? 'LOCKED' : w.ammoKey ? `${G.ammo[w.ammoKey]}` : '∞');
-  }
-
-  // Vitals + vehicle.
-  els['health-fill'].style.width = `${clamp(p.health, 0, 100)}%`;
-  els['armor-fill'].style.width = `${clamp(p.armor, 0, 100)}%`;
-  show('vehicle-info', !!p.inCar);
-  if (p.inCar) {
-    setHtml('speed', `${Math.round(Math.abs(p.inCar.speed) * 3.6)} <small>km/h</small>`);
-    setText('vehicle-name', p.inCar.def.name + (p.inCar.flatTire > 0 ? ' — tires shredded' : ''));
-    els['condition-fill'].style.width = `${clamp((p.inCar.hp / p.inCar.maxHp) * 100, 0, 100)}%`;
-  }
-
-  // The bust meter: a thin red bar that fills while they have you boxed.
-  const bust = clamp(G.bustMeter / 2.4, 0, 1);
-  show('bust-wrap', bust > 0.02);
-  if (bust > 0.02) els['bust-fill'].style.width = `${bust * 100}%`;
-
-  // One-line system note (spikes, empty mag), fading after a few seconds.
-  if (G.hudNote && G.elapsed - G.hudNoteAt < 3.5) {
-    show('hud-note', true);
-    setText('hud-note', G.hudNote);
-  } else show('hud-note', false);
-
+  setText('cash', `$${G.cash}`);
+  setText('respect-line', `${RANKS[G.rankIndex].name} · Respect ${G.respect}`);
+  const stars = Math.round(G.wanted);
+  setText('stars', '★★★★★'.slice(0, stars) + '☆☆☆☆☆'.slice(0, 5 - stars));
+  setShow('wanted-label', G.wanted >= 1);
+  if (G.wanted >= 1) setText('wanted-label', G.wanted >= 4 ? 'HEAT' : 'SEARCHING');
+  // Bars and weapons.
+  setBar('health-fill', G.health / 100);
+  setBar('armor-fill', G.armor / 100);
+  updateWeapons();
   // Radio.
   const st = currentStation();
-  setHtml('radio-line', isMuted() ? '<b>Radio</b> · muted (N)' : `<b>${st.name}</b> · ${st.track}`);
-
+  setText('radio-line', `${st.name} · ${st.song}`);
   // Dialogue.
-  if (G.dialogue) {
-    show('dialogue', true);
-    const line = G.dialogue.lines[G.dialogue.index];
-    const ch = CHARACTERS[line.who];
-    setText('dlg-name', ch.name);
+  const d = G.dialogue;
+  setShow('dialogue', !!d);
+  if (d) {
+    const line = d.lines[Math.min(d.index, d.lines.length - 1)];
+    setText('dlg-name', line.who);
     setText('dlg-text', line.text);
-    els['dlg-portrait'].textContent = ch.initials;
-    els['dlg-portrait'].style.background = ch.color;
-  } else show('dialogue', false);
-
-  // District label + the map header follows the same computation.
-  const district = districtAt(p.x, p.z);
-  setText('map-district', district);
-  if (district !== lastDistrict) {
-    lastDistrict = district;
-    districtTimer = 2.6;
-    setText('location-label', district);
   }
-  if (districtTimer > 0) {
-    districtTimer -= dt;
-    els['location-label'].classList.add('show');
-  } else els['location-label'].classList.remove('show');
-
-  // Toasts and banners, one at a time.
-  if (toastTimer > 0) toastTimer -= dt;
-  else if (G.toastQueue.length) {
-    setText('toast', G.toastQueue.shift());
-    els.toast.classList.add('show');
-    toastTimer = 2.6;
-  } else els.toast.classList.remove('show');
-
-  if (bannerTimer > 0) bannerTimer -= dt;
-  else if (G.bannerQueue.length) {
-    const b = G.bannerQueue.shift();
-    setText('banner-big', b.big);
-    setText('banner-sub', b.sub);
-    els.banner.classList.add('show');
-    bannerTimer = 3.2;
-  } else els.banner.classList.remove('show');
-
-  // Damage vignette flash.
-  if (G.damageFlash > 0) {
-    G.damageFlash = Math.max(0, G.damageFlash - dt * 1.8);
-    els['damage-flash'].style.opacity = String(G.damageFlash * 0.85);
-  } else els['damage-flash'].style.opacity = '0';
+  // Speedo while driving.
+  const car = G.player && G.player.car;
+  setShow('speedo', !!car);
+  if (car) {
+    setText('speed-val', String(Math.round(Math.abs(car.speed) * 3.6)));
+    setText('car-name', car.type.name);
+    setBar('condition-fill', car.hp / car.maxHp);
+  }
+  // District caption + interact prompt.
+  if (G.player) {
+    const dist = districtAt(G.player.x, G.player.z).name;
+    if (dist !== G.district) {
+      G.district = dist;
+      setText('district-caption', dist.toUpperCase());
+    }
+  }
+  setShow('interact', !!G.interactText && !G.dialogue);
+  if (G.interactText) setText('interact', G.interactText);
+  setShow('garage-panel', !!G.garageOpen);
 }

@@ -1,11 +1,8 @@
-// people.js — the figure kit: articulated low-poly bodies built from a
-// rig of pivoted parts, the outfit lottery that dresses Puerto Alba,
-// the weapon models, and the pose set every system acts through.
-// Poses bend joints only — a pose NEVER rotates the figure's root;
-// facing is the caller's heading, applied to the mesh itself. (That
-// contract was measured the hard way in a facing audit: a posed man
-// aims where his mesh points, not where his record says.)
-import { makeRng, clamp } from './util.js';
+// people.js — articulated low-poly figures: pivoted limbs, outfits, weapon
+// models and the pose set. Poses move limbs around their pivots; the root
+// itself never rotates, so a posed figure keeps its footing and heading.
+
+import { makeRng, pick, randRange } from './util.js';
 
 export const SKIN_TONES = [0xc98a5e, 0x8a5a3b, 0xe8b48c, 0x6e4530, 0xa06a42, 0xdb9f6e];
 export const SHIRT_COLORS = [0xd84f35, 0x2f7fd0, 0xf2b13c, 0x35b06f, 0xf5f0e6, 0xff7ab0, 0x57d7e8, 0x8a5fc0, 0xe8e3d5, 0x30363e, 0xff8c42, 0x2ea8a0, 0xc94f78];
@@ -14,263 +11,240 @@ export const HAIR_COLORS = [0x1d1410, 0x3a2415, 0x6e4a26, 0xb08a4f, 0xd8d3c8, 0x
 
 export function outfitRng(seed) { return makeRng(seed); }
 
-/** Dress a random citizen: tones, a hair style, sometimes a pattern. */
 export function randomOutfit(rng) {
-  const pickOne = (list) => list[Math.floor(rng() * list.length) % list.length];
   return {
-    skin: pickOne(SKIN_TONES),
-    shirt: pickOne(SHIRT_COLORS),
-    pants: pickOne(PANTS_COLORS),
-    hair: pickOne(HAIR_COLORS),
-    hairStyle: pickOne(['short', 'long', 'bun', 'cap', 'bald', 'short']),
-    skirt: rng() < 0.22,
-    shirtPattern: rng() < 0.3 ? pickOne(['stripes', 'dots', 'floral']) : null,
-    glasses: rng() < 0.18,
-    uniform: false,
+    skin: pick(rng, SKIN_TONES),
+    shirt: pick(rng, SHIRT_COLORS),
+    pants: pick(rng, PANTS_COLORS),
+    hair: pick(rng, HAIR_COLORS),
+    dress: rng() < 0.22,
+    cap: rng() < 0.18,
   };
 }
 
-function patternTexture(kind, colorHex) {
-  const c = document.createElement('canvas');
-  c.width = 64; c.height = 64;
-  const g = c.getContext('2d');
-  const base = `#${new THREE.Color(colorHex).getHexString()}`;
-  g.fillStyle = base; g.fillRect(0, 0, 64, 64);
-  g.fillStyle = 'rgba(255,255,255,0.35)';
-  if (kind === 'stripes') { for (let y = 4; y < 64; y += 12) g.fillRect(0, y, 64, 4); }
-  else if (kind === 'dots') { for (let y = 8; y < 64; y += 16) for (let x = 8; x < 64; x += 16) { g.beginPath(); g.arc(x, y, 3, 0, 7); g.fill(); } }
-  else { for (let i = 0; i < 10; i += 1) { g.beginPath(); g.arc(6 + (i * 37) % 52, 6 + (i * 23) % 52, 4, 0, 7); g.fill(); } }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  return tex;
-}
-
-function box(parent, mat, sx, sy, sz, x, y, z) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+const mat = (color) => new THREE.MeshLambertMaterial({ color });
+function pbox(w, h, d, color, x, y, z) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color));
   m.position.set(x, y, z);
   m.castShadow = true;
-  parent.add(m);
   return m;
 }
 
-/** Build one articulated figure from an outfit record. */
-export function buildPersonMesh(opts = {}) {
-  const o = {
-    skin: 0xc98a5e, shirt: 0x2f7fd0, pants: 0x2c3a55, hair: 0x1d1410,
-    hairStyle: 'short', skirt: false, shirtPattern: null, glasses: false, uniform: false, ...opts,
-  };
-  const skinMat = new THREE.MeshLambertMaterial({ color: o.skin });
-  const shirtMat = o.shirtPattern
-    ? new THREE.MeshLambertMaterial({ map: patternTexture(o.shirtPattern, o.shirt) })
-    : new THREE.MeshLambertMaterial({ color: o.shirt });
-  const pantsMat = new THREE.MeshLambertMaterial({ color: o.pants });
-  const hairMat = new THREE.MeshLambertMaterial({ color: o.hair });
+// A limb pivot: a group at the joint with the limb mesh hanging below it.
+function limb(w, len, color, shoeColor) {
+  const g = new THREE.Group();
+  const seg = pbox(w, len, w, color, 0, -len / 2, 0);
+  g.add(seg);
+  if (shoeColor !== undefined) g.add(pbox(w + 0.04, 0.09, w + 0.14, shoeColor, 0, -len + 0.02, 0.04));
+  return g;
+}
 
-  const root = new THREE.Group();
-  const rig = new THREE.Group();
-  root.add(rig);
-
-  // Legs pivot at the hip (y 0.95).
-  const mkLeg = (side) => {
-    const leg = new THREE.Group();
-    leg.position.set(0.11 * side, 0.95, 0);
-    box(leg, pantsMat, 0.15, 0.9, 0.17, 0, -0.45, 0);
-    box(leg, new THREE.MeshLambertMaterial({ color: 0x2a2d33 }), 0.15, 0.08, 0.27, 0, -0.93, 0.045);
-    rig.add(leg);
-    return leg;
-  };
-  const legL = mkLeg(-1), legR = mkLeg(1);
-
-  // Torso and head.
-  const torso = new THREE.Group();
-  torso.position.set(0, 0.95, 0);
-  box(torso, shirtMat, 0.44, 0.62, 0.24, 0, 0.31, 0);
-  if (o.skirt) {
-    const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.36, 0.42, 8), shirtMat);
-    skirt.position.set(0, 0.02, 0);
-    skirt.castShadow = true;
-    torso.add(skirt);
+// Weapon models: chunky silhouettes that read at screenshot distance.
+export function buildWeaponMesh(kind) {
+  const g = new THREE.Group();
+  const dark = 0x1d1f24, wood = 0x6e4a26, steel = 0x565d66;
+  if (kind === 'pistol') {
+    g.add(pbox(0.07, 0.13, 0.3, dark, 0, 0, 0.08));
+    g.add(pbox(0.06, 0.2, 0.09, dark, 0, -0.13, -0.02));
+  } else if (kind === 'smg') {
+    g.add(pbox(0.08, 0.14, 0.62, dark, 0, 0, 0.16));
+    g.add(pbox(0.06, 0.26, 0.08, steel, 0, -0.16, 0.1));
+    g.add(pbox(0.06, 0.18, 0.08, dark, 0, -0.1, -0.14));
+    g.add(pbox(0.05, 0.05, 0.2, steel, 0, 0.09, 0.3));
+  } else if (kind === 'shotgun') {
+    g.add(pbox(0.09, 0.13, 0.95, steel, 0, 0.02, 0.2));
+    g.add(pbox(0.1, 0.16, 0.34, wood, 0, -0.03, -0.32));
+    g.add(pbox(0.11, 0.14, 0.3, wood, 0, -0.05, 0.18));
   }
-  if (o.uniform) box(torso, new THREE.MeshLambertMaterial({ color: 0xd8b13c }), 0.07, 0.09, 0.02, -0.12, 0.42, 0.13);
-  rig.add(torso);
+  g.userData.kind = kind;
+  return g;
+}
 
-  const head = new THREE.Group();
-  head.position.set(0, 1.58, 0);
-  box(head, skinMat, 0.24, 0.28, 0.24, 0, 0.12, 0);
-  if (o.hairStyle !== 'bald') box(head, hairMat, 0.26, 0.1, 0.26, 0, 0.27, 0);
-  if (o.hairStyle === 'long') box(head, hairMat, 0.26, 0.36, 0.07, 0, 0.08, -0.115);
-  if (o.hairStyle === 'bun') box(head, hairMat, 0.13, 0.13, 0.13, 0, 0.3, -0.1);
-  if (o.hairStyle === 'cap') box(head, new THREE.MeshLambertMaterial({ color: o.uniform ? 0x22345e : o.shirt }), 0.27, 0.07, 0.3, 0, 0.26, 0.03);
-  if (o.uniform) box(head, new THREE.MeshLambertMaterial({ color: 0x22345e }), 0.27, 0.07, 0.3, 0, 0.26, 0.03);
-  if (o.glasses) box(head, new THREE.MeshLambertMaterial({ color: 0x14161a }), 0.25, 0.06, 0.03, 0, 0.14, 0.125);
-  rig.add(head);
+// Attach (or hide) a weapon on a figure: 'hand', 'hip' or 'none'.
+export function showWeapon(mesh, kind, where) {
+  const u = mesh.userData;
+  if (u.weaponMesh) { u.weaponMesh.parent.remove(u.weaponMesh); u.weaponMesh = null; }
+  if (!kind || kind === 'fists' || where === 'none') return;
+  const w = buildWeaponMesh(kind);
+  if (where === 'hip') {
+    w.position.set(0.16, -0.34, -0.05);
+    w.rotation.x = Math.PI / 2.4;
+    u.hips.add(w);
+  } else {
+    w.position.set(0, -0.62, 0.14);
+    w.rotation.x = -Math.PI / 2 + 0.3;
+    u.armR.add(w);
+  }
+  u.weaponMesh = w;
+}
 
-  // Arms pivot at the shoulder (y 1.5); the right hand carries a
-  // weapon anchor, the right hip a holster anchor.
-  const mkArm = (side) => {
-    const arm = new THREE.Group();
-    arm.position.set(0.285 * side, 1.5, 0);
-    box(arm, shirtMat, 0.11, 0.6, 0.12, 0, -0.26, 0);
-    box(arm, skinMat, 0.1, 0.12, 0.11, 0, -0.6, 0);
-    rig.add(arm);
-    return arm;
-  };
-  const armL = mkArm(-1), armR = mkArm(1);
-  const handR = new THREE.Group();
-  handR.position.set(0, -0.62, 0.02);
-  armR.add(handR);
-  const hipAnchor = new THREE.Group();
-  hipAnchor.position.set(0.27, 1.04, 0.04);
-  rig.add(hipAnchor);
+// Figure layout (metres): legs pivot at hip height 0.86, torso above, arms
+// pivot at shoulder height 1.42, head on top. Total height ~1.78.
+export function buildPersonMesh(opts = {}) {
+  const o = Object.assign(randomOutfit(makeRng(opts.seed || 7)), opts);
+  const root = new THREE.Group();
+  const hips = new THREE.Group();
+  hips.position.y = 0.86;
+  root.add(hips);
 
-  root.userData.parts = { rig, legL, legR, torso, head, armL, armR, handR, hipAnchor };
-  root.userData.weapons = { hand: null, hip: null };
-  posePerson(root, 'idle', 0);
+  const legL = limb(0.17, 0.86, o.dress ? o.skin : o.pants, 0x2a2320);
+  legL.position.set(-0.13, 0.86, 0);
+  root.add(legL);
+  const legR = limb(0.17, 0.86, o.dress ? o.skin : o.pants, 0x2a2320);
+  legR.position.set(0.13, 0.86, 0);
+  root.add(legR);
+
+  if (o.dress) {
+    const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.4, 0.52, 7), mat(o.shirt));
+    skirt.position.y = 0.22; skirt.castShadow = true;
+    hips.add(skirt);
+  }
+  const torso = pbox(0.46, 0.62, 0.24, o.shirt, 0, 0.31, 0);
+  hips.add(torso);
+  if (o.belt !== undefined) hips.add(pbox(0.47, 0.08, 0.25, o.belt, 0, 0.03, 0));
+
+  const headG = new THREE.Group();
+  headG.position.y = 0.68;
+  hips.add(headG);
+  headG.add(pbox(0.3, 0.34, 0.3, o.skin, 0, 0.16, 0));
+  if (o.cap) {
+    headG.add(pbox(0.34, 0.09, 0.34, o.capColor || 0x274b63, 0, 0.35, 0));
+    headG.add(pbox(0.3, 0.05, 0.2, o.capColor || 0x274b63, 0, 0.31, 0.22));
+  } else {
+    headG.add(pbox(0.32, 0.12, 0.32, o.hair, 0, 0.36, -0.01));
+  }
+
+  const armL = limb(0.13, 0.68, o.shirt, undefined);
+  armL.position.set(-0.31, 0.56, 0);
+  armL.children[0].material = mat(o.shirt);
+  hips.add(armL);
+  const armR = limb(0.13, 0.68, o.shirt, undefined);
+  armR.position.set(0.31, 0.56, 0);
+  hips.add(armR);
+  // Hands in skin tone at the limb ends.
+  for (const a of [armL, armR]) {
+    const hand = pbox(0.12, 0.12, 0.12, o.skin, 0, -0.68, 0);
+    a.add(hand);
+  }
+
+  root.userData = { hips, head: headG, armL, armR, legL, legR, outfit: o, weaponMesh: null };
   return root;
 }
 
-/** The modelled guns: P-9 pistol, Kobra SMG, Muelle shotgun. */
-export function buildWeaponMesh(kind) {
-  const grp = new THREE.Group();
-  const steel = new THREE.MeshLambertMaterial({ color: 0x1c1e22 });
-  const dark = new THREE.MeshLambertMaterial({ color: 0x2c2f34 });
-  const wood = new THREE.MeshLambertMaterial({ color: 0x7d5f38 });
-  const add = (mat, sx, sy, sz, x, y, z) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
-    m.position.set(x, y, z);
-    m.castShadow = true;
-    grp.add(m);
-    return m;
-  };
-  if (kind === 'pistol') {
-    add(dark, 0.05, 0.12, 0.19, 0, -0.03, 0.02);
-    add(steel, 0.04, 0.05, 0.15, 0, 0.05, 0.1);
-  } else if (kind === 'smg') {
-    add(dark, 0.06, 0.13, 0.46, 0, 0, 0);
-    add(steel, 0.04, 0.04, 0.16, 0, 0.03, 0.3);
-    add(steel, 0.05, 0.17, 0.07, 0, -0.13, 0.04);
-    add(wood, 0.05, 0.09, 0.15, 0, 0.01, -0.29);
-  } else if (kind === 'shotgun') {
-    add(wood, 0.07, 0.12, 0.34, 0, 0, -0.16);
-    add(steel, 0.055, 0.055, 0.5, 0, 0.045, 0.22);
-    add(wood, 0.085, 0.085, 0.2, 0, -0.01, 0.18);
-  }
-  return grp;
-}
+function setLimb(g, x, y, z) { g.rotation.set(x, y, z); }
 
-/** Put a weapon in the hand or on the hip; clears what was there. */
-export function showWeapon(mesh, kind, where) {
-  const parts = mesh.userData.parts;
-  const store = mesh.userData.weapons;
-  if (!parts || !store) return;
-  if (store[where]) {
-    store[where].parent?.remove(store[where]);
-    store[where] = null;
-  }
-  if (!kind || kind === 'fists') return;
-  const gun = buildWeaponMesh(kind);
-  if (where === 'hip') {
-    gun.position.set(0, 0, 0);
-    gun.rotation.x = 0.5;
-    parts.hipAnchor.add(gun);
-  } else {
-    gun.position.set(0, -0.02, 0.06);
-    parts.handR.add(gun);
-  }
-  store[where] = gun;
-}
-
-/**
- * Pose a figure. Joints only: legs, arms, torso, head and the rig's
- * height (for sitting and crouching) — the root's rotation is never
- * touched, so a posed figure faces exactly where its mesh was turned.
- * opts: { crouch: 0..1, armsUp: bool }.
- */
+// The pose set. `phase` animates walk cycles and chat gestures; opts.aimYaw
+// lets a shooter track a target without turning the root.
 export function posePerson(mesh, pose, phase = 0, opts = {}) {
-  const P = mesh.userData.parts;
-  if (!P) return;
-  const crouch = clamp(opts.crouch ?? 0, 0, 1);
-  P.rig.position.y = 0;
-  P.legL.rotation.set(0, 0, 0); P.legR.rotation.set(0, 0, 0);
-  P.armL.rotation.set(0, 0, 0); P.armR.rotation.set(0, 0, 0);
-  P.torso.rotation.set(0, 0, 0); P.head.rotation.set(0, 0, 0);
-
-  if (crouch > 0) {
-    P.rig.position.y -= 0.26 * crouch;
-    P.legL.rotation.x = -0.55 * crouch;
-    P.legR.rotation.x = 0.3 * crouch;
-    P.torso.rotation.x = 0.16 * crouch;
-  }
-
+  const u = mesh.userData;
+  const { hips, head, armL, armR, legL, legR } = u;
+  u.yOff = 0;
+  hips.position.y = 0.86;
+  hips.rotation.set(0, 0, 0);
+  head.rotation.set(0, 0, 0);
+  setLimb(armL, 0, 0, 0.06);
+  setLimb(armR, 0, 0, -0.06);
+  setLimb(legL, 0, 0, 0.02);
+  setLimb(legR, 0, 0, -0.02);
+  const sway = Math.sin(phase * 2) * 0.03;
   switch (pose) {
     case 'walk': {
-      const s = Math.sin(phase);
-      P.legL.rotation.x = s * 0.55; P.legR.rotation.x = -s * 0.55;
-      P.armL.rotation.x = -s * 0.4; P.armR.rotation.x = s * 0.4;
+      const s = Math.sin(phase * 6);
+      setLimb(legL, s * 0.55, 0, 0.02);
+      setLimb(legR, -s * 0.55, 0, -0.02);
+      setLimb(armL, -s * 0.4, 0, 0.06);
+      setLimb(armR, s * 0.4, 0, -0.06);
+      hips.position.y = 0.86 + Math.abs(Math.cos(phase * 6)) * 0.03;
       break;
     }
     case 'run': {
-      const s = Math.sin(phase);
-      P.legL.rotation.x = s * 0.95; P.legR.rotation.x = -s * 0.95;
-      P.armL.rotation.x = -s * 0.8; P.armR.rotation.x = s * 0.8;
-      P.torso.rotation.x += 0.14;
-      break;
-    }
-    case 'flee': {
-      const s = Math.sin(phase * 1.3);
-      P.legL.rotation.x = s * 1.0; P.legR.rotation.x = -s * 1.0;
-      if (opts.armsUp) {
-        P.armL.rotation.x = -2.9 + Math.sin(phase * 2.2) * 0.16;
-        P.armR.rotation.x = -2.9 - Math.sin(phase * 2.2) * 0.16;
-      } else {
-        P.armL.rotation.x = -s * 0.9; P.armR.rotation.x = s * 0.9;
-      }
-      P.torso.rotation.x += 0.18;
+      const s = Math.sin(phase * 9);
+      setLimb(legL, s * 0.85, 0, 0.02);
+      setLimb(legR, -s * 0.85, 0, -0.02);
+      setLimb(armL, -s * 0.7, 0, 0.1);
+      setLimb(armR, s * 0.7, 0, -0.1);
+      hips.rotation.x = 0.14;
+      hips.position.y = 0.86 + Math.abs(Math.cos(phase * 9)) * 0.05;
       break;
     }
     case 'chat': {
-      P.armR.rotation.x = -0.55 + Math.sin(phase * 1.7) * 0.28;
-      P.armR.rotation.z = -0.15;
-      P.armL.rotation.x = -0.2 + Math.cos(phase * 1.3) * 0.14;
-      P.head.rotation.y = Math.sin(phase * 0.6) * 0.14;
+      const g = Math.sin(phase * 2.2);
+      setLimb(armR, -0.7 + g * 0.22, 0, -0.15);
+      setLimb(armL, -0.25 - g * 0.12, 0, 0.2);
+      head.rotation.y = Math.sin(phase * 0.9) * 0.14;
+      hips.rotation.z = sway * 0.4;
       break;
     }
     case 'sit': {
-      P.rig.position.y = -0.44;
-      P.legL.rotation.x = -1.5; P.legR.rotation.x = -1.45;
-      P.armL.rotation.x = -0.42; P.armR.rotation.x = -0.42;
+      setLimb(legL, -Math.PI / 2, 0, 0.02);
+      setLimb(legR, -Math.PI / 2, 0, -0.02);
+      hips.position.y = 0.48;
+      setLimb(armL, -0.35, 0, 0.12);
+      setLimb(armR, -0.35, 0, -0.12);
       break;
     }
     case 'aim': {
-      // Planted: feet apart, knees soft (the crouch above), the gun
-      // arm level at the shoulder, the support arm tucked under it —
-      // the whole shotgun silhouette clear of the torso.
-      P.armR.rotation.x = -Math.PI / 2 + 0.05;
-      P.armL.rotation.x = -Math.PI / 2 + 0.3;
-      P.armL.rotation.z = 0.55;
-      P.legL.rotation.z = 0.1; P.legR.rotation.z = -0.1;
-      P.torso.rotation.y = -0.1;
-      if (!opts.crouch) {
-        P.rig.position.y -= 0.06;
-        P.legL.rotation.x = -0.12; P.legR.rotation.x = 0.08;
-      }
+      // Planted stance: feet apart, both arms up on the weapon.
+      setLimb(legL, 0.06, 0, 0.16);
+      setLimb(legR, -0.1, 0, -0.16);
+      setLimb(armR, -Math.PI / 2 + 0.06, 0, -0.05);
+      setLimb(armL, -Math.PI / 2 + 0.16, -0.25, 0.3);
+      hips.rotation.x = 0.07;
+      if (opts.aimYaw) head.rotation.y = opts.aimYaw;
+      break;
+    }
+    case 'fire': {
+      const kick = Math.abs(Math.sin(phase * 31)) * 0.05;
+      setLimb(legL, 0.06, 0, 0.16);
+      setLimb(legR, -0.12, 0, -0.16);
+      setLimb(armR, -Math.PI / 2 - kick, 0, -0.05);
+      setLimb(armL, -Math.PI / 2 + 0.14, -0.25, 0.3);
+      hips.rotation.x = 0.09;
+      hips.position.y = 0.85;
+      break;
+    }
+    case 'crouch': {
+      setLimb(legL, -1.9, 0, 0.05);
+      setLimb(legR, -0.5, 0, -0.05);
+      hips.position.y = 0.45;
+      hips.rotation.x = 0.3;
+      setLimb(armR, -Math.PI / 2 + 0.1, 0, -0.05);
+      setLimb(armL, -0.9, -0.2, 0.25);
+      break;
+    }
+    case 'surrender': {
+      setLimb(armL, Math.PI - 0.25, 0, 0.5);
+      setLimb(armR, Math.PI - 0.25, 0, -0.5);
+      head.rotation.x = 0.18;
+      hips.position.y = 0.84 + sway * 0.2;
       break;
     }
     case 'down': {
-      P.armL.rotation.z = 2.5; P.armR.rotation.z = -2.3;
-      P.armL.rotation.x = -0.4; P.armR.rotation.x = 0.3;
-      P.legL.rotation.x = 0.12; P.legR.rotation.x = -0.06;
+      // Lying flat on the back: legs swing forward horizontal, torso folds
+      // back horizontal at the same height, and the whole figure drops by
+      // yOff so the body line rests on the ground instead of floating.
+      setLimb(legL, Math.PI / 2 - 0.05, 0, 0.05);
+      setLimb(legR, Math.PI / 2 + 0.04, 0, -0.04);
+      hips.rotation.x = Math.PI / 2 - 0.05;
+      hips.position.y = 0.86;
+      setLimb(armL, 0.4, 0, 0.85);
+      setLimb(armR, -0.3, 0, -0.65);
+      head.rotation.x = -0.35;
+      u.yOff = -0.68;
       break;
     }
-    case 'punch': {
-      P.armR.rotation.x = -1.85;
-      P.torso.rotation.y = 0.3;
+    case 'drive': {
+      setLimb(legL, -Math.PI / 2 + 0.15, 0, 0.02);
+      setLimb(legR, -Math.PI / 2 + 0.3, 0, -0.02);
+      hips.position.y = 0.5;
+      setLimb(armL, -0.85, 0, 0.15);
+      setLimb(armR, -0.85, 0, -0.15);
       break;
     }
-    default: { // idle / stand: breathing, a little weight shift
-      P.armL.rotation.x = Math.sin(phase * 0.9) * 0.05;
-      P.armR.rotation.x = -Math.sin(phase * 0.9) * 0.05;
-      P.torso.rotation.y = Math.sin(phase * 0.45) * 0.03;
+    default: { // stand / idle: a breathing figure, weight shifting
+      hips.position.y = 0.86 + sway * 0.3;
+      setLimb(armL, sway, 0, 0.07);
+      setLimb(armR, -sway, 0, -0.07);
     }
   }
 }

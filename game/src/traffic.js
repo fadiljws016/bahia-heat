@@ -1,133 +1,78 @@
-// Round seventeen: traffic spawns ride randomRoadPoint's { x, z, heading, axis, line, dir } from the rebuilt city — lanes at the surveyed offsets, never inside a footprint.
-// traffic.js — the ordinary drivers of Puerto Alba: thirty-two cars
-// following the grid lane by lane, brake lights flaring in queues, turns
-// at intersections, and panic. Gunfire within earshot and the whole street
-// puts its foot down, horns blaring, which is exactly the chaos a chase
-// should plough through. Round eight leaves the grid alone too: the
-// chase photograph's boulevard traffic is this same staged flow, and
-// FALCON-1's lower pass over it is a pin in the staging, not a change
-// to how the city drives. Round three widens the panic radius a touch —
-// with the louder gunfights of the new combat pass, more of the street
-// reacts at once. Round six leaves the traffic alone: no staged frame
-// this round turns on a moving car, and the grid drives as it did.
-// hears them and runs. Round five leaves the thirty-two drivers to their
-// lanes — none of its notes (signage, smoke, facings) were about traffic.
+// traffic.js — ambient traffic: cars that pick a road, hold their lane and
+// cruise the grid, respawning at the edges so the city never empties.
 
-// Round seven stages no live traffic inside the combat frame and
-// changes none here: the tableau's moving chaos stays in the chase
-// shot, and the alley's cars are parked dressing from vehicles.js.
 import { G } from './state.js';
-import { ROADS_X, ROADS_Z, BOULEVARD_X, randomRoadPoint } from './city.js';
-import { clamp, wrapAngle, dist2d, makeRng } from './util.js';
-import { createCar, driveCar, removeCar } from './vehicles.js';
-import { sfx } from './audio.js';
+import { makeRng, pick, clamp, dist2d } from './util.js';
+import { createCar, driveCar, removeCar, CAR_TYPES } from './vehicles.js';
+import { randomRoadPoint, CITY_BOUNDS } from './city.js';
 
-const rng = makeRng(20240);
-const TARGET = 32;
-const TYPES = ['sedan', 'sedan', 'sedan', 'sport', 'taxi', 'truck'];
+const TRAFFIC_TYPES = ['sedan', 'sedan', 'sedan', 'sport', 'taxi', 'truck'];
+const LANE = 3.5;
+let _rng = makeRng(808);
 
-function spawnTraffic() {
-  const pt = randomRoadPoint(rng);
-  const d = dist2d(pt.x, pt.z, G.player.x, G.player.z);
-  if (d < 42) return null;
-  const car = createCar(TYPES[Math.floor(rng() * TYPES.length)], pt.x, pt.z, pt.heading, null, rng);
+function lanePose(pt) {
+  // Right-hand traffic: the lane sits to the right of the direction of travel.
+  if (pt.axis === 'x') {
+    return {
+      x: pt.line + (pt.dir > 0 ? LANE : -LANE),
+      z: pt.along,
+      heading: pt.dir > 0 ? 0 : Math.PI,
+    };
+  }
+  return {
+    x: pt.along,
+    z: pt.line + (pt.dir > 0 ? -LANE : LANE),
+    heading: pt.dir > 0 ? Math.PI / 2 : -Math.PI / 2,
+  };
+}
+
+function spawnTrafficCar() {
+  const pt = randomRoadPoint(_rng);
+  const pose = lanePose(pt);
+  if (G.player && dist2d(pose.x, pose.z, G.player.x, G.player.z) < 24) return null;
+  const type = pick(_rng, TRAFFIC_TYPES);
+  const car = createCar(type, pose.x, pose.z, pose.heading, undefined, _rng);
   car.driver = 'traffic';
-  car.route = { axis: pt.axis, line: pt.line, dir: pt.dir };
-  car.cruise = 10 + rng() * 5;
-  car.panicT = 0;
-  G.trafficCars.push(car);
+  car.trafficPt = pt;
+  car.speed = car.type.topSpeed * 0.45;
   return car;
 }
 
 export function initTraffic() {
-  for (let i = 0; i < TARGET; i += 1) spawnTraffic();
+  for (let i = 0; i < 14; i++) spawnTrafficCar();
 }
 
-/**
- * Is anything solid `look` metres ahead of the car (in its lane, roughly)?
- * Checks every car set plus the player's — a traffic queue behind a chase
- * reads as a queue because of this.
- */
-function blockedAhead(car, allCars, look) {
-  const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
-  for (const other of allCars) {
-    if (other === car || other.dead) continue;
-    const dx = other.x - car.x, dz = other.z - car.z;
-    const ahead = dx * fx + dz * fz;
-    if (ahead < 0.5 || ahead > look) continue;
-    const side = Math.abs(dx * fz - dz * fx);
-    if (side < 2.1) return other;
-  }
-  return null;
+function recycle(car) {
+  const pt = randomRoadPoint(_rng);
+  const pose = lanePose(pt);
+  car.x = pose.x; car.z = pose.z; car.heading = pose.heading;
+  car.trafficPt = pt;
+  car.speed = car.type.topSpeed * 0.45;
+  car.hp = car.type.hp; car.dead = false;
 }
 
 export function updateTraffic(dt) {
-  if (G.trafficCars.length < TARGET && rng() < 0.06) spawnTraffic();
-  const allCars = [...G.trafficCars, ...G.policeCars, ...G.parkedCars];
-  if (G.player.inCar) allCars.push(G.player.inCar);
-  const threatNear = G.elapsed - (G.lastShotAt ?? -99) < 3;
-
-  for (let i = G.trafficCars.length - 1; i >= 0; i -= 1) {
-    const car = G.trafficCars[i];
-    if (car.dead) { G.trafficCars.splice(i, 1); continue; }
-    const dPlayer = dist2d(car.x, car.z, G.player.x, G.player.z);
-    if (dPlayer > 300) { removeCar(car); G.trafficCars.splice(i, 1); continue; }
-    const r = car.route;
-    if (!r) continue;
-
-    // Panic: shooting nearby, or a cruiser screaming past, and they run.
-    // The radius widens again in round four (40 → 42 m): a crossfire this
-    // size should empty the whole block, not just the corner.
-    if (threatNear && dPlayer < 42) car.panicT = 2.6;
-    if (car.panicT > 0) car.panicT -= dt;
-    const panicking = car.panicT > 0;
-
-    // Follow the current road line; turn when an intersection nears.
-    let targetHeading = car.heading;
-    if (r.axis === 'z') {
-      targetHeading = r.dir > 0 ? 0 : Math.PI;
-      let nextJunction = null;
-      for (const rz of ROADS_Z) {
-        const dz = (rz - car.z) * r.dir;
-        if (dz > 2 && dz < 30 && (nextJunction === null || dz < nextJunction.d)) nextJunction = { line: rz, d: dz };
-      }
-      if (nextJunction && nextJunction.d < 9 && rng() < 0.012) {
-        r.axis = 'x'; r.line = nextJunction.line;
-        r.dir = rng() < 0.5 ? 1 : -1;
-        car.z = nextJunction.line + (r.dir > 0 ? 3.5 : -3.5);
-      }
-    } else {
-      targetHeading = r.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
-      const verticals = [BOULEVARD_X, ...ROADS_X];
-      let nextJunction = null;
-      for (const rx of verticals) {
-        const dx = (rx - car.x) * r.dir;
-        if (dx > 2 && dx < 30 && (nextJunction === null || dx < nextJunction.d)) nextJunction = { line: rx, d: dx };
-      }
-      if (nextJunction && nextJunction.d < 9 && rng() < 0.012) {
-        r.axis = 'z'; r.line = nextJunction.line;
-        r.dir = rng() < 0.5 ? 1 : -1;
-        car.x = nextJunction.line + (r.dir > 0 ? -3.5 : 3.5);
-      }
+  if (G.shotMode) return;
+  const traffic = G.cars.filter((c) => c.driver === 'traffic');
+  if (traffic.length < 14) spawnTrafficCar();
+  for (const car of traffic) {
+    if (car.dead) continue;
+    const pt = car.trafficPt;
+    // Drive along the current road; at the bounds, pick a fresh road.
+    let throttle = 0.62;
+    // Slow for the car ahead in the same lane.
+    for (const o of G.cars) {
+      if (o === car) continue;
+      const ahead = (o.x - car.x) * Math.sin(car.heading) + (o.z - car.z) * Math.cos(car.heading);
+      const side = Math.abs((o.x - car.x) * Math.cos(car.heading) - (o.z - car.z) * Math.sin(car.heading));
+      if (ahead > 0 && ahead < 7 && side < 1.6) { throttle = 0; break; }
     }
-
-    const diff = wrapAngle(targetHeading - car.heading);
-    const steer = clamp(diff * 2.0, -1, 1);
-    const blocker = blockedAhead(car, allCars, panicking ? 6 : 8.5);
-    let throttle = 0;
-    car.brakeLight = !!blocker;
-    if (blocker) {
-      throttle = car.speed > 1 ? -0.7 : 0;
-      car.brakeLight = true;
-      if (car.speed < 0.5 && rng() < 0.004 && G.elapsed > (car.honkAt ?? 0)) { sfx.horn(); car.honkAt = G.elapsed + 6; }
-    } else if (panicking) {
-      throttle = 1;
-      if (Math.abs(car.speed) > 24) throttle = 0.2;
-      if (rng() < 0.01) sfx.horn();
-    } else {
-      throttle = Math.abs(car.speed) < car.cruise ? 0.75 : 0.05;
-    }
-    driveCar(car, { throttle, steer, handbrake: false }, dt);
-    car.brakeLight = car.brakeLight || throttle < 0;
+    driveCar(car, { throttle, steer: 0 }, dt);
+    // Hold the lane line.
+    if (pt.axis === 'x') car.x += clamp((pt.line + (pt.dir > 0 ? LANE : -LANE)) - car.x, -dt * 2, dt * 2);
+    else car.z += clamp((pt.line + (pt.dir > 0 ? -LANE : LANE)) - car.z, -dt * 2, dt * 2);
+    const out = car.x < CITY_BOUNDS.minX + 4 || car.x > CITY_BOUNDS.maxX - 4 || car.z < CITY_BOUNDS.minZ + 4 || car.z > CITY_BOUNDS.maxZ - 4;
+    const far = G.player && dist2d(car.x, car.z, G.player.x, G.player.z) > 190;
+    if (out || far) recycle(car);
   }
 }

@@ -1,253 +1,133 @@
-// Round seventeen: staged officers keep their posts and phases from the survey — spawnOfficerAt honours { phase, roadblock, homeCar } as the shots.js staging passes them.
-// officers.js — PAPD on foot: the missing half of the wanted system. At
-// three stars and above, when the player is out of their car, cruisers stop
-// and officers get out — navy uniforms, caps, drawn pistols — and fight the
-// way the dispatch panel says they do: dive behind a car, crouch, pop up,
-// fire a burst, duck back down. Two more stand at every roadblock. They are
-// real targets: combat.js can hit them, and putting one down is the fastest
-// way to make the whole city angry. Round eight fields one more of
-// these officers in the staged fight — a sixth man posted by the
-// surrendering civilian — and arms the two deep men with Kobras for
-// the photograph; both are staging calls in shots.js, and the live
-// deployment below still puts P-9s in every officer's hand. Round six re-verifies the staged
-// officers' facings from the combat shot's new gun-side camera: their
-// aimOfficer turns (shots.js) were already exact, and from the new lens
-// their guns read trained on the runner at last. Behaviour unchanged.
-// way to make the whole city angry.
-//
-// Round three dresses them properly (the uniform flag now reaches the
-// person factory: navy cap with its badge, belt, chest badge), puts the
-// modelled P-9 in their hands, and lengthens their bursts — four to six
-// rounds at a faster cadence, so a PAPD volley reads as a volley.
-//
-// Round four leaves their shooting as it is — the change is in how it
-// looks: officerShot speaks through gunshotFx like everyone else, so the
-// smaller muzzle stars and short warm tracer dashes of the effects pass
-// apply to the PAPD unchanged, and their navy stays readable mid-fight.
-//
-// Round five's audit measured these officers dead-on — heading, mesh and
-// barrel on the player to within a degree. The explicit turn in
-// aimOfficer (shots.js) is the pattern that keeps them honest; round
-// five only had to give the runner the same courtesy.
+// officers.js — PAPD foot officers: the navy figures who hold roadblocks,
+// take cover behind their cruisers and keep up a live fire pattern in the
+// staged scenes. spawnOfficerAt is the staging entry point.
 
-// Round seven re-spreads this file's staged officers by projection
-// in shots.js — one short of the cruiser, one deep on the second
-// line, one across the street. spawnOfficerAt, the aim/cover phases
-// and the live deployment logic here are unchanged.
 import { G } from './state.js';
-import { clamp, collideCircleBox, dist2d, makeRng } from './util.js';
-import { collidersNear } from './city.js';
+import { randRange, lerpAngle, dist2d } from './util.js';
 import { buildPersonMesh, posePerson, showWeapon } from './people.js';
 import { gunshotFx } from './effects.js';
 import { hurtPlayer } from './player.js';
-import { damageCar } from './vehicles.js';
-import { sfx } from './audio.js';
 
-const rng = makeRng(777);
-const OFFICER_HP = 42;
+const NAVY = 0x27355a;
+let _unitCounter = 863;
 
 export function spawnOfficerAt(x, z, opts = {}) {
   const mesh = buildPersonMesh({
-    skin: [0xf2c79b, 0xc68863, 0x8a5a3b, 0x5d3a24][Math.floor(rng() * 4)],
-    shirt: 0x22345e, pants: 0x1a2440, hair: 0x1c1c22,
-    hairStyle: 'short', uniform: true,
+    skin: 0xc98a5e, shirt: NAVY, pants: 0x1f2733, hair: 0x1d1410,
+    dress: false, cap: true, capColor: 0x1f2c44, belt: 0xd8b13c, seed: 7000 + G.officers.length * 13,
   });
-  showWeapon(mesh, 'pistol', 'hand'); // deployed officers carry drawn
   mesh.position.set(x, 0, z);
-  G.scene.add(mesh);
+  if (G.scene) G.scene.add(mesh);
   const off = {
-    mesh, x, z, heading: 0, hp: OFFICER_HP, dead: false, state: 'active',
-    phase: opts.phase ?? 'move', phaseT: 0.5 + rng() * 0.8,
-    coverX: opts.coverX ?? x, coverZ: opts.coverZ ?? z,
-    homeCar: opts.homeCar ?? null, roadblock: opts.roadblock ?? null,
-    burstLeft: 0, shootCd: 0, flinchT: 0, downTimer: 0, phaseSeed: rng() * 10,
-    walkPhase: rng() * 6,
+    mesh, x, z,
+    heading: opts.heading || 0,
+    phase: opts.phase || 'stand',     // 'fire' | 'crouch' | 'chase' | 'stand'
+    homeCar: opts.homeCar || null,
+    roadblock: opts.roadblock || null,
+    target: opts.target || null,      // {x, z} or an actor with x/z
+    health: 100, down: false,
+    unit: _unitCounter++,
+    fireTimer: randRange(Math.random, 0.2, 1.4),
+    posePhase: randRange(Math.random, 0, 6),
+    staged: !!opts.staged,
   };
-  mesh.userData.officer = off;
+  showWeapon(mesh, 'pistol', off.phase === 'fire' || off.phase === 'crouch' ? 'hand' : 'hip');
   G.officers.push(off);
+  applyPose(off, 0);
   return off;
 }
 
-/** Two officers posted at a roadblock, already behind their cruisers. */
+function applyPose(off, phase) {
+  const pose = off.down ? 'down'
+    : off.phase === 'fire' ? 'fire'
+    : off.phase === 'crouch' ? 'crouch'
+    : off.phase === 'chase' ? 'run'
+    : 'stand';
+  posePerson(off.mesh, pose, phase);
+  off.mesh.position.set(off.x, off.mesh.userData.yOff || 0, off.z);
+  off.mesh.rotation.y = off.heading;
+}
+
 export function spawnRoadblockOfficers(rb) {
-  for (const c of rb.cars) {
-    const off = spawnOfficerAt(c.x + 1.8, c.z + 1.2, {
-      phase: 'crouch', coverX: c.x, coverZ: c.z + 2.6, roadblock: rb, homeCar: c,
-    });
-    off.heading = Math.PI;
-  }
+  const made = [];
+  made.push(spawnOfficerAt(rb.x - 2.2, rb.z + 2.8, { phase: 'crouch', roadblock: rb, staged: G.shotMode }));
+  made.push(spawnOfficerAt(rb.x + 5.4, rb.z + 2.8, { phase: 'fire', roadblock: rb, staged: G.shotMode }));
+  return made;
 }
 
-/** Keep the foot presence matched to the heat: deploy at 3★ vs a player on foot. */
+// Live play keeps a small foot presence near the station and the marina.
 export function ensureOfficers() {
-  if (G.mode !== 'playing' || G.player.inCar || G.wanted < 2.9) return;
-  const want = Math.min(5, 2 + Math.floor(G.wanted));
-  const active = G.officers.filter((o) => !o.dead && !o.roadblock).length;
-  if (active >= want) return;
-  // Deploy from the nearest cruisers that have not already emptied.
-  const cruisers = G.policeCars
-    .filter((c) => !c.dead && dist2d(c.x, c.z, G.player.x, G.player.z) < 95)
-    .sort((a, b) => dist2d(a.x, a.z, G.player.x, G.player.z) - dist2d(b.x, b.z, G.player.x, G.player.z));
-  for (const car of cruisers) {
-    if (G.officers.filter((o) => !o.dead && !o.roadblock).length >= want) break;
-    if (car.anchored) continue;
-    car.anchored = true;
-    for (let i = 0; i < 2; i += 1) {
-      const side = i === 0 ? 1 : -1;
-      const off = spawnOfficerAt(
-        car.x + Math.cos(car.heading) * side * 1.7,
-        car.z - Math.sin(car.heading) * side * 1.7,
-        { homeCar: car },
-      );
-      setCoverFromCar(off, car);
-    }
+  if (G.shotMode) return;
+  const want = G.wanted >= 2 ? 4 : 2;
+  const alive = G.officers.filter((o) => !o.down && !o.staged);
+  if (alive.length >= want) return;
+  const spots = [[168, 44], [-196, 20], [104, -36], [30, 26]];
+  for (const [x, z] of spots) {
+    if (alive.length >= want) break;
+    if (alive.some((o) => dist2d(o.x, o.z, x, z) < 6)) continue;
+    spawnOfficerAt(x, z, { phase: 'stand' });
   }
-}
-
-/** The cover point for an officer: behind his car, away from the player. */
-function setCoverFromCar(off, car) {
-  const away = Math.max(0.1, dist2d(car.x, car.z, G.player.x, G.player.z));
-  const ux = (car.x - G.player.x) / away, uz = (car.z - G.player.z) / away;
-  off.coverX = car.x + ux * 2.4;
-  off.coverZ = car.z + uz * 2.4;
-  off.phase = 'move';
 }
 
 export function removeOfficer(off) {
-  if (off.mesh.parent) off.mesh.parent.remove(off.mesh);
-  off.dead = true;
+  const i = G.officers.indexOf(off);
+  if (i >= 0) G.officers.splice(i, 1);
+  if (off.mesh && off.mesh.parent) off.mesh.parent.remove(off.mesh);
 }
 
-/** Damage an officer. Down is down — and the PAPD takes it personally. */
 export function hurtOfficer(off, amount) {
-  if (off.dead || off.state === 'down') return;
-  off.hp -= amount;
-  off.flinchT = 0.22;
-  if (off.hp <= 0) {
-    off.state = 'down';
-    off.downTimer = 30;
-    posePerson(off.mesh, 'down');
-    off.mesh.rotation.x = -Math.PI / 2;
-    off.mesh.position.y = 0.25;
-    G.policeAggro = true;
+  if (off.down) return;
+  off.health -= amount;
+  if (off.health <= 0) {
+    off.down = true;
+    applyPose(off, 0);
   }
 }
 
-function keepOutOfWalls(off) {
-  for (const box of collidersNear(G.city, off.x, off.z)) {
-    const hit = collideCircleBox(off.x, off.z, 0.5, box);
-    if (hit) { off.x = hit.x; off.z = hit.z; }
-  }
-  off.x = clamp(off.x, -248, 290);
-  off.z = clamp(off.z, -305, 305);
+function targetPoint(off) {
+  if (off.target && typeof off.target.x === 'number') return off.target;
+  if (G.player) return G.player;
+  return { x: off.x + Math.sin(off.heading) * 8, z: off.z + Math.cos(off.heading) * 8 };
 }
 
-/** One visible officer shot at the player, fired from the P-9's muzzle. */
-function officerShot(off) {
-  const p = G.player;
-  const gx = off.x + Math.sin(off.heading) * 0.92, gz = off.z + Math.cos(off.heading) * 0.92;
-  G.lastShotAt = G.elapsed;
-  sfx.shot();
-  if (p.inCar) {
-    const hit = rng() < 0.26;
-    gunshotFx(gx, 1.36, gz, p.inCar.x + (rng() - 0.5) * 2, 0.9, p.inCar.z + (rng() - 0.5) * 2,
-      { heading: off.heading, hit: hit ? 'spark' : null });
-    if (hit) damageCar(p.inCar, 2.5, false);
-    return;
-  }
-  const hit = rng() < 0.3;
-  gunshotFx(gx, 1.36, gz,
-    p.x + (hit ? 0 : (rng() - 0.5) * 3.4), hit ? 1.1 : 0.7, p.z + (hit ? 0 : (rng() - 0.5) * 3.4),
-    { heading: off.heading, hit: hit ? 'flesh' : 'dust' });
-  if (hit) hurtPlayer(3 + rng() * 4);
+// One live round from a staged 'fire' officer: muzzle at the gun tip,
+// tracer to the target's chest, sparks where it lands.
+export function officerShoot(off) {
+  const t = targetPoint(off);
+  const mx = off.x + Math.sin(off.heading) * 0.45;
+  const mz = off.z + Math.cos(off.heading) * 0.45;
+  gunshotFx(mx, 1.32, mz, t.x, 1.15, t.z, { heading: off.heading });
 }
 
 export function updateOfficers(dt) {
-  ensureOfficers();
-  const p = G.player;
-  const engaged = G.wanted >= 2.4 && G.mode === 'playing';
-
-  for (let i = G.officers.length - 1; i >= 0; i -= 1) {
-    const off = G.officers[i];
-    if (off.dead) { G.officers.splice(i, 1); continue; }
-    if (off.roadblock?.gone) { removeOfficer(off); G.officers.splice(i, 1); continue; }
-    if (off.flinchT > 0) off.flinchT -= dt;
-
-    if (off.state === 'down') {
-      off.downTimer -= dt;
-      if (off.downTimer <= 0) { removeOfficer(off); G.officers.splice(i, 1); }
-      continue;
-    }
-
-    const dPlayer = dist2d(off.x, off.z, p.x, p.z);
-    if (dPlayer > 150 && !off.roadblock) { removeOfficer(off); G.officers.splice(i, 1); continue; }
-
-    // The player drove off: walk back to the cruiser and stand down.
-    if (!off.roadblock && p.inCar && Math.abs(p.inCar.speed) > 20 && dPlayer > 34) {
-      off.phase = 'return';
-    }
-    if (off.phase === 'return') {
-      const home = off.homeCar;
-      if (!home || home.dead) { removeOfficer(off); G.officers.splice(i, 1); continue; }
-      const d = dist2d(off.x, off.z, home.x, home.z);
-      if (d < 2.6) {
-        home.anchored = G.officers.some((o) => o !== off && !o.dead && o.homeCar === home && o.phase !== 'return');
-        removeOfficer(off); G.officers.splice(i, 1); continue;
-      }
-      const mx = (home.x - off.x) / d, mz = (home.z - off.z) / d;
-      off.x += mx * 3.6 * dt; off.z += mz * 3.6 * dt;
-      off.walkPhase += dt * 8;
-      off.heading = Math.atan2(mx, mz);
-      keepOutOfWalls(off);
-      off.mesh.position.set(off.x, 0, off.z);
-      off.mesh.rotation.y = off.heading;
-      posePerson(off.mesh, 'walk', off.walkPhase);
-      continue;
-    }
-
-    off.heading = Math.atan2(p.x - off.x, p.z - off.z);
-    let pose = 'aim', crouch = 0.2;
-
-    if (off.phase === 'move') {
-      const d = dist2d(off.x, off.z, off.coverX, off.coverZ);
-      if (d < 0.7) { off.phase = 'crouch'; off.phaseT = 0.7 + rng() * 1.0; }
-      else {
-        const mx = (off.coverX - off.x) / d, mz = (off.coverZ - off.z) / d;
-        off.x += mx * 4.8 * dt; off.z += mz * 4.8 * dt;
-        off.walkPhase += dt * 11;
-        keepOutOfWalls(off);
-        pose = 'run';
-      }
-    } else if (off.phase === 'crouch') {
-      crouch = 0.85;
-      off.phaseT -= dt;
-      if (off.phaseT <= 0 && engaged) { off.phase = 'fire'; off.burstLeft = 4 + Math.floor(rng() * 3); off.shootCd = 0; }
-    } else if (off.phase === 'fire') {
-      crouch = 0.12;
-      off.shootCd -= dt;
-      if (off.shootCd <= 0 && dPlayer < 36) {
-        off.shootCd = 0.13;
-        off.burstLeft -= 1;
-        officerShot(off);
-        if (off.burstLeft <= 0) {
-          off.phase = 'crouch'; off.phaseT = 0.8 + rng() * 1.2;
-          // Long fights drift: if the home car rolled, find fresh cover.
-          if (off.homeCar && !off.homeCar.dead && !off.roadblock) setCoverFromCar(off, off.homeCar);
+  for (const off of G.officers) {
+    if (off.down) continue;
+    off.posePhase += dt * 2;
+    const t = targetPoint(off);
+    if (off.phase === 'fire' || off.phase === 'crouch') {
+      // Hold position, track the target, fire in ragged bursts.
+      const want = Math.atan2(t.x - off.x, t.z - off.z);
+      off.heading = lerpAngle(off.heading, want, Math.min(1, dt * 5));
+      off.fireTimer -= dt;
+      if (off.fireTimer <= 0) {
+        officerShoot(off);
+        off.fireTimer = off.phase === 'fire' ? randRange(Math.random, 0.35, 1.1) : randRange(Math.random, 0.9, 1.8);
+        if (!G.shotMode && G.player && dist2d(off.x, off.z, G.player.x, G.player.z) < 26 && Math.random() < 0.3) {
+          hurtPlayer(3 + Math.random() * 4);
         }
-      } else if (!engaged) { off.phase = 'crouch'; off.phaseT = 1; }
+      }
+    } else if (!G.shotMode && off.phase === 'chase' && G.player) {
+      const d = dist2d(off.x, off.z, G.player.x, G.player.z);
+      const want = Math.atan2(G.player.x - off.x, G.player.z - off.z);
+      off.heading = lerpAngle(off.heading, want, Math.min(1, dt * 6));
+      if (d > 2.2) {
+        off.x += Math.sin(off.heading) * 3.6 * dt;
+        off.z += Math.cos(off.heading) * 3.6 * dt;
+      } else if (Math.random() < dt * 0.8) {
+        officerShoot(off);
+        if (Math.random() < 0.4) hurtPlayer(2 + Math.random() * 3);
+      }
     }
-
-    off.mesh.position.set(off.x, 0, off.z);
-    off.mesh.rotation.y = off.heading;
-    off.mesh.rotation.x = off.flinchT > 0 ? -0.13 : 0;
-    if (pose === 'run') posePerson(off.mesh, 'run', off.walkPhase);
-    else posePerson(off.mesh, 'aim', 0, { crouch });
-  }
-
-  // Anchored cruisers stay anchored only while an officer is out of them.
-  for (const car of G.policeCars) {
-    if (car.anchored && !G.officers.some((o) => !o.dead && o.homeCar === car && o.state !== 'down')) {
-      car.anchored = false;
-    }
+    applyPose(off, off.posePhase);
   }
 }

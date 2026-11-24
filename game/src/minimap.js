@@ -1,556 +1,370 @@
-// Round seventeen: re-verified against the rebuilt city's surveyed PLACES — the marina gate sits at (-212, 290), so the Hot Delivery route from the drive staging reads its 686 m again.
-// minimap.js — Puerto Alba's cartography, one painted language at two
-// sizes. The static layer (gradient sea, sand edge, pastel district washes
-// with borders, a road hierarchy with the palm boulevard drawn proud, the
-// marina and landmarks) is painted once in world coordinates. The round HUD
-// minimap blits the slice around the player and stamps the live blips plus
-// the gold route. The full-screen map (M) draws the whole city from the
-// same layer — district names, glyph icons for the garage, the PAPD station.
-// Round eight redraws no cartography: the combat frame's round map
-// still names Viejo Puerto under the re-staged fight, and the chase
-// frame's still reads MARINA ALTA under the boulevard — the staging
-// moved actors and one helicopter, never the map.
-// Round six redraws no cartography: the map's MARINA ALTA label and the
-// colonnade fascia (city.js) still name the same quarter, the fascia
-// just hangs lower with clearer lettering now.
-// and the hospital, a glowing animated route with a distance readout, and
-// the player's pulsing arrow. The route itself is real: a Dijkstra run
-// over the road grid's intersections.
-//
-// Round five leaves the chart as painted: it already names all six
-// districts that round four's signs — resized in round five so the
-// MARINA ALTA fascia fits its cover frame — now name in the world.
-//
-// Round three deepens the chart to match the graded world: a richer sea,
-// stronger district washes, a warmer land base — the map reads like the
-// city at golden hour, not a grey diagram.
-//
-// Owner polish pass (unrecorded revision): the chart learns its manners.
-// District washes firm up into six unmistakable territories, depth rings
-// shade the bay around the shore, the marina's eight moored boats sit at
-// their real berths beside the piers, courtyard-plaza hearts paint green
-// and parking slabs pale, and the big map gains glyphs for Marisol's
-// corner, Tito's race lights, the marina docks and the lighthouse — every
-// one of them named in the legend, every one a place the world really
-// has. A compass rose replaces the bare N. Nothing moves: same island,
-// same roads, same gold route.
+// minimap.js — Puerto Alba on paper: the corner minimap and the full city
+// map. Districts are painted from the real DISTRICTS rectangles in their
+// tints, POIs are glyphs drawn from real PLACES data, and the route is a
+// road-following line along the boulevard to the live objective.
 
-// Round seven moves no cartography: the combat frame's round minimap
-// still centres the alley in Viejo Puerto, and the drive frame's
-// full-screen map is the same painting as round six.
 import { G } from './state.js';
-import { ROADS_X, ROADS_Z, BOULEVARD_X, ROAD_WIDTH, DISTRICTS, PLACES } from './city.js';
+import { clamp, dist2d } from './util.js';
+import { DISTRICTS, PLACES, ROADS_X, ROADS_Z, BOULEVARD_X, BEACH_X, CITY_BOUNDS, districtAt } from './city.js';
 import { objectivePoint } from './missions.js';
 
-const WORLD = { minX: -300, maxX: 320, minZ: -340, maxZ: 340 };
-const SCALE = 1.6; // px per metre on the static layer
-let staticLayer = null;
-let ctx = null;
-let canvas = null;
-let bigCtx = null;
-let bigCanvas = null;
-
-const DISTRICT_WASH = {
-  'El Faro': 'rgba(198,180,232,0.46)',
-  'Playa Brava': 'rgba(250,228,158,0.50)',
-  'Marina Alta': 'rgba(118,214,236,0.50)',
-  'Las Palmas': 'rgba(146,219,150,0.50)',
-  'Centro Alba': 'rgba(255,196,178,0.44)',
-  'Viejo Puerto': 'rgba(233,176,106,0.52)',
-};
-
-function paintStatic() {
-  const w = (WORLD.maxX - WORLD.minX) * SCALE;
-  const h = (WORLD.maxZ - WORLD.minZ) * SCALE;
-  staticLayer = document.createElement('canvas');
-  staticLayer.width = w; staticLayer.height = h;
-  const g = staticLayer.getContext('2d');
-  const X = (x) => (x - WORLD.minX) * SCALE;
-  const Z = (z) => (z - WORLD.minZ) * SCALE;
-
-  // The bay: a gradient that deepens away from the shore.
-  const sea = g.createLinearGradient(0, 0, X(-200), 0);
-  sea.addColorStop(0, '#123a58');
-  sea.addColorStop(0.75, '#1f6390');
-  sea.addColorStop(1, '#3583ac');
-  g.fillStyle = sea; g.fillRect(0, 0, w, h);
-  // Depth shading: a pale shallow shelf hugging the shore, then fainter
-  // rings stepping out into the bay. The land fill below covers whatever
-  // falls inland, so only the water keeps the shading.
-  g.fillStyle = 'rgba(126,204,230,0.30)';
-  g.fillRect(X(-264), 0, (316 + 264) * SCALE, h);
-  const RINGS = [[22, 'rgba(170,222,246,0.26)'], [36, 'rgba(170,222,246,0.16)'], [54, 'rgba(170,222,246,0.09)']];
-  for (const [off, col] of RINGS) {
-    g.strokeStyle = col; g.lineWidth = 2;
-    g.strokeRect(X(-252 - off), Z(-340 - off), (544 + off * 2) * SCALE, (680 + off * 2) * SCALE);
-  }
-  // Land, then the sand edge along Playa Brava.
-  g.fillStyle = '#77805f'; g.fillRect(X(-252), 0, (292 + 252) * SCALE, h);
-  g.fillStyle = '#ecd49c'; g.fillRect(X(-252), 0, 27 * SCALE, h);
-  g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(X(-226.5), 0, 1.6 * SCALE, h); // the waterline
-  // District washes with soft borders.
-  for (const d of DISTRICTS) {
-    g.fillStyle = DISTRICT_WASH[d.name] ?? 'rgba(255,255,255,0.12)';
-    g.fillRect(X(d.minX), Z(d.minZ), (d.maxX - d.minX) * SCALE, (d.maxZ - d.minZ) * SCALE);
-    g.strokeStyle = 'rgba(255,250,235,0.55)';
-    g.lineWidth = 1.4;
-    g.strokeRect(X(d.minX), Z(d.minZ), (d.maxX - d.minX) * SCALE, (d.maxZ - d.minZ) * SCALE);
-  }
-  // Open blocks the city really leaves open: courtyard-plaza hearts in a
-  // planted green, parking slabs in pale asphalt.
-  for (const pz of G.city?.plazas ?? []) {
-    g.fillStyle = pz.parking ? 'rgba(216,211,200,0.55)' : 'rgba(96,164,84,0.50)';
-    g.fillRect(X(pz.minX), Z(pz.minZ), (pz.maxX - pz.minX) * SCALE, (pz.maxZ - pz.minZ) * SCALE);
-  }
-  // The plaza's green heart, with the clock tower standing in it.
-  g.fillStyle = '#5f9c4e';
-  g.fillRect(X(PLACES.plaza.x - 15), Z(PLACES.plaza.z - 15), 30 * SCALE, 30 * SCALE);
-  g.fillStyle = '#e8d9b0';
-  g.fillRect(X(PLACES.clockTower.x - 2), Z(PLACES.clockTower.z - 2), 4 * SCALE, 4 * SCALE);
-  // Roads: side streets pale, the boulevard a proud golden band.
-  g.fillStyle = '#dcd9d0';
-  for (const rx of ROADS_X) g.fillRect(X(rx) - (ROAD_WIDTH / 2) * SCALE, 0, ROAD_WIDTH * SCALE, h);
-  for (const rz of ROADS_Z) g.fillRect(0, Z(rz) - (ROAD_WIDTH / 2) * SCALE, w, ROAD_WIDTH * SCALE);
-  g.fillStyle = '#f0dfa8';
-  g.fillRect(X(BOULEVARD_X) - ((ROAD_WIDTH + 5) / 2) * SCALE, 0, (ROAD_WIDTH + 5) * SCALE, h);
-  g.fillStyle = 'rgba(255,255,255,0.5)';
-  g.fillRect(X(BOULEVARD_X) - 0.4 * SCALE, 0, 0.8 * SCALE, h);
-  // Marina piers and the pleasure pier.
-  g.fillStyle = '#8a6844';
-  for (let i = 0; i < 4; i += 1) g.fillRect(X(-259), Z(198 + i * 22), 26 * SCALE, 4 * SCALE);
-  if (G.city?.pier) g.fillRect(X(G.city.pier.toX), Z(G.city.pier.z - 2.5), (G.city.pier.fromX - G.city.pier.toX) * SCALE, 5 * SCALE);
-  // The marina's moored boats, at the very berths city.js floats them:
-  // eight hulls west of the piers, white with their real trim colours.
-  const BOAT_TRIMS = ['#d84f35', '#2f7fd0', '#35b06f', '#f2b13c'];
-  for (let i = 0; i < 8; i += 1) {
-    const bx = -254 - (i % 3) * 7.5, bz = 194 + i * 12.5;
-    g.fillStyle = '#f0ede6';
-    g.beginPath(); g.roundRect(X(bx - 1.6), Z(bz - 4), 3.2 * SCALE, 8 * SCALE, 2); g.fill();
-    g.fillStyle = BOAT_TRIMS[i % 4];
-    g.fillRect(X(bx - 1.7), Z(bz - 0.4), 3.4 * SCALE, 0.8 * SCALE);
-  }
-  // The Ferris wheel: a little ring on the beach.
-  if (G.city?.ferris) {
-    g.strokeStyle = '#ffcf5e'; g.lineWidth = 2;
-    g.beginPath(); g.arc(X(G.city.ferris.x), Z(G.city.ferris.z), 6 * SCALE, 0, Math.PI * 2); g.stroke();
-  }
-  // The lighthouse point.
-  g.fillStyle = '#ffffff';
-  g.beginPath(); g.arc(X(PLACES.lighthouse.x), Z(PLACES.lighthouse.z), 3.4 * SCALE, 0, Math.PI * 2); g.fill();
-  g.fillStyle = '#d8402e';
-  g.beginPath(); g.arc(X(PLACES.lighthouse.x), Z(PLACES.lighthouse.z), 1.7 * SCALE, 0, Math.PI * 2); g.fill();
-}
+let _mini = null, _miniCtx = null, _big = null, _bigCtx = null;
+const ROUTE_LANE_X = BOULEVARD_X - 4; // the boulevard's far lane, -216
 
 export function initMinimap() {
-  canvas = document.getElementById('minimap');
-  ctx = canvas.getContext('2d');
-  bigCanvas = document.getElementById('bigmap');
-  if (bigCanvas) bigCtx = bigCanvas.getContext('2d');
-  paintStatic();
+  _mini = document.getElementById('minimap');
+  if (_mini) _miniCtx = _mini.getContext('2d');
+  _big = document.getElementById('bigmap');
+  if (_big) _bigCtx = _big.getContext('2d');
 }
 
-// ------------------------------------------------------------- the router
-const VX = [BOULEVARD_X, ...ROADS_X];
-const HZ = ROADS_Z;
-let routeCache = { key: '', pts: null, dist: 0 };
-
-function nearestNode(x, z) {
-  let bi = 0, bj = 0, bd = Infinity;
-  for (let i = 0; i < VX.length; i += 1) for (let j = 0; j < HZ.length; j += 1) {
-    const d = (VX[i] - x) ** 2 + (HZ[j] - z) ** 2;
-    if (d < bd) { bd = d; bi = i; bj = j; }
-  }
-  return bi * HZ.length + bj;
-}
-
-/** Dijkstra over the intersection grid; returns world points player→target. */
-function computeRoute(fx, fz, tx, tz) {
-  const start = nearestNode(fx, fz);
-  const goal = nearestNode(tx, tz);
-  const n = VX.length * HZ.length;
-  const dist = new Array(n).fill(Infinity);
-  const prev = new Array(n).fill(-1);
-  const done = new Array(n).fill(false);
-  dist[start] = 0;
-  const nodePos = (idx) => ({ x: VX[Math.floor(idx / HZ.length)], z: HZ[idx % HZ.length] });
-  for (let step = 0; step < n; step += 1) {
-    let u = -1, best = Infinity;
-    for (let i = 0; i < n; i += 1) if (!done[i] && dist[i] < best) { best = dist[i]; u = i; }
-    if (u === -1 || u === goal) break;
-    done[u] = true;
-    const ui = Math.floor(u / HZ.length), uj = u % HZ.length;
-    const up = nodePos(u);
-    for (const [vi, vj] of [[ui - 1, uj], [ui + 1, uj], [ui, uj - 1], [ui, uj + 1]]) {
-      if (vi < 0 || vj < 0 || vi >= VX.length || vj >= HZ.length) continue;
-      const v = vi * HZ.length + vj;
-      const vp = nodePos(v);
-      const wgt = Math.hypot(vp.x - up.x, vp.z - up.z);
-      if (dist[u] + wgt < dist[v]) { dist[v] = dist[u] + wgt; prev[v] = u; }
-    }
-  }
-  const pts = [{ x: fx, z: fz }];
-  const chain = [];
-  let cur = goal;
-  while (cur !== -1) { chain.push(nodePos(cur)); if (cur === start) break; cur = prev[cur]; }
-  chain.reverse();
-  for (const p of chain) pts.push(p);
-  pts.push({ x: tx, z: tz });
-  let total = 0;
-  for (let i = 1; i < pts.length; i += 1) total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
-  return { pts, dist: total };
-}
-
-/** The live route to the current objective, recomputed only when it moves. */
+// The driving route: along the player's road to the boulevard lane, down
+// the boulevard to the objective's latitude, then in to the objective.
+// Its length is the number the distance pill shows.
 export function currentRoute() {
   const obj = objectivePoint();
-  if (!obj) { routeCache = { key: '', pts: null, dist: 0 }; return null; }
-  const p = G.player;
-  const key = `${Math.round(obj.x / 4)},${Math.round(obj.z / 4)},${Math.round(p.x / 25)},${Math.round(p.z / 25)}`;
-  if (routeCache.key !== key) {
-    const r = computeRoute(p.x, p.z, obj.x, obj.z);
-    routeCache = { key, pts: r.pts, dist: r.dist };
+  if (!obj || !G.player) return null;
+  const px = G.player.car ? G.player.car.x : G.player.x;
+  const pz = G.player.car ? G.player.car.z : G.player.z;
+  let roadZ = ROADS_Z[0], best = Infinity;
+  for (const rz of ROADS_Z) {
+    const d = Math.abs(rz - pz);
+    if (d < best) { best = d; roadZ = rz; }
   }
-  return routeCache;
+  const points = [
+    { x: px, z: pz },
+    { x: ROUTE_LANE_X, z: pz },
+    { x: ROUTE_LANE_X, z: obj.z },
+    { x: obj.x, z: obj.z },
+  ];
+  const dist = Math.abs(px - ROUTE_LANE_X) + Math.abs(obj.z - roadZ);
+  return { points, dist: Math.round(dist), objective: obj };
 }
 
-// ------------------------------------------------------------- shared stamps
-function drawRoute(g, toMap, width) {
-  const route = currentRoute();
-  if (!route?.pts || route.pts.length < 2) return;
-  g.save();
-  g.strokeStyle = '#ffb340';
-  g.lineWidth = width;
-  g.lineJoin = 'round'; g.lineCap = 'round';
-  g.shadowColor = 'rgba(255,179,64,0.9)';
-  g.shadowBlur = width * 2.4;
-  g.beginPath();
-  route.pts.forEach((pt, i) => {
-    const [mx, my] = toMap(pt.x, pt.z);
-    if (i === 0) g.moveTo(mx, my); else g.lineTo(mx, my);
-  });
-  g.stroke();
-  g.shadowBlur = 0;
-  g.strokeStyle = 'rgba(255,240,200,0.85)';
-  g.lineWidth = Math.max(1, width * 0.45);
-  g.setLineDash([9, 7]);
-  g.lineDashOffset = -G.elapsed * 26;
-  g.beginPath();
-  route.pts.forEach((pt, i) => {
-    const [mx, my] = toMap(pt.x, pt.z);
-    if (i === 0) g.moveTo(mx, my); else g.lineTo(mx, my);
-  });
-  g.stroke();
-  g.restore();
-}
-
-function drawBlips(g, toMap, inView, big) {
-  const phase = Math.floor(G.elapsed * 2.4) % 2 === 0;
-  // Traffic: quiet grey dots (big map only — the minimap stays readable).
-  if (big) {
-    g.fillStyle = 'rgba(215,220,225,0.8)';
-    for (const car of G.trafficCars) {
-      if (car.dead) continue;
-      const [mx, my] = toMap(car.x, car.z);
-      g.fillRect(mx - 1.6, my - 1.6, 3.2, 3.2);
+// Paint the shared base: bay, district tints, plaza greens, road grid.
+function paintBase(ctx, toMap, view) {
+  const B = CITY_BOUNDS;
+  // Bay water with depth rings hugging the shore.
+  const [wx, wy] = toMap(B.minX - 60, B.minZ);
+  const [wx2, wy2] = toMap(BEACH_X, B.maxZ);
+  ctx.fillStyle = '#7fb8d8';
+  ctx.fillRect(wx, wy, wx2 - wx, wy2 - wy);
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 1.4;
+  for (let i = 1; i <= 3; i++) {
+    const [rx] = toMap(BEACH_X - i * 9, 0);
+    ctx.beginPath();
+    ctx.moveTo(rx, wy);
+    ctx.lineTo(rx, wy2);
+    ctx.stroke();
+  }
+  // Land base.
+  const [lx, ly] = toMap(BEACH_X, B.minZ);
+  const [lx2, ly2] = toMap(B.maxX, B.maxZ);
+  ctx.fillStyle = '#d9c9a3';
+  ctx.fillRect(lx, ly, lx2 - lx, ly2 - ly);
+  // District tints.
+  for (const d of DISTRICTS) {
+    const [x1, y1] = toMap(d.minX, d.minZ);
+    const [x2, y2] = toMap(d.maxX, d.maxZ);
+    ctx.fillStyle = d.tint;
+    ctx.globalAlpha = 0.5;
+    ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+    ctx.globalAlpha = 1;
+  }
+  // Beach sand strip.
+  const [sx1, sy1] = toMap(B.minX, B.minZ);
+  const [sx2] = toMap(BEACH_X, B.minZ);
+  ctx.fillStyle = '#ecd29a';
+  ctx.fillRect(sx1, sy1, sx2 - sx1, ly2 - ly);
+  // Plaza greens from the live city data.
+  if (G.city) {
+    ctx.fillStyle = '#79b264';
+    for (const p of G.city.plazas) {
+      if (!p.green) continue;
+      const [x1, y1] = toMap(p.x - p.w / 2, p.z - p.d / 2);
+      const [x2, y2] = toMap(p.x + p.w / 2, p.z + p.d / 2);
+      ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
     }
   }
-  // The job's target car.
-  if (G.mission?.targetCar && !G.mission.targetCar.dead) {
-    const [mx, my] = toMap(G.mission.targetCar.x, G.mission.targetCar.z);
-    g.fillStyle = '#ffd23e';
-    g.beginPath(); g.arc(mx, my, big ? 5 : 4, 0, Math.PI * 2); g.fill();
+  // Roads.
+  ctx.strokeStyle = '#f4efe2';
+  ctx.lineWidth = Math.max(1.4, (view.scale || 1) * 3.2);
+  ctx.beginPath();
+  for (const lx of [...ROADS_X, BOULEVARD_X]) {
+    const [x, y1] = toMap(lx, B.minZ);
+    const [, y2] = toMap(lx, B.maxZ);
+    ctx.moveTo(x, y1); ctx.lineTo(x, y2);
   }
-  // Police cars: flashing red/blue, clamped to the minimap's edge.
-  for (const car of G.policeCars) {
-    if (car.dead) continue;
-    const [mx, my] = inView(car.x, car.z);
-    g.fillStyle = phase ? '#ff3b30' : '#3a7bff';
-    g.strokeStyle = 'rgba(255,255,255,0.85)';
-    g.lineWidth = 1;
-    g.beginPath(); g.arc(mx, my, big ? 4.4 : 3.4, 0, Math.PI * 2); g.fill(); g.stroke();
+  for (const lz of ROADS_Z) {
+    const [x1, y] = toMap(B.minX, lz);
+    const [x2] = toMap(B.maxX, lz);
+    ctx.moveTo(x1, y); ctx.lineTo(x2, y);
   }
-  // Officers on foot: small navy squares.
-  g.fillStyle = '#7ab0ff';
-  for (const o of G.officers) {
-    if (o.dead || o.state === 'down') continue;
-    const [mx, my] = inView(o.x, o.z);
-    g.fillRect(mx - 2.2, my - 2.2, 4.4, 4.4);
+  ctx.stroke();
+  // Marina piers.
+  ctx.strokeStyle = '#8a7355';
+  ctx.lineWidth = Math.max(1.2, (view.scale || 1) * 1.6);
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const [x1, y] = toMap(-252, 194 + i * 12.5);
+    const [x2] = toMap(-269, 194 + i * 12.5);
+    ctx.moveTo(x1, y); ctx.lineTo(x2, y);
   }
-  // FALCON-1.
-  if (G.heli?.active) {
-    const [mx, my] = inView(G.heli.x, G.heli.z);
-    g.fillStyle = '#ffffff';
-    g.fillRect(mx - 2.6, my - 2.6, 5.2, 5.2);
-  }
+  ctx.stroke();
 }
 
-function drawObjective(g, toMap, clampPt, big) {
-  const obj = objectivePoint();
-  if (!obj) return null;
-  const [mx, my] = clampPt(obj.x, obj.z);
-  const r = (big ? 7 : 5) + Math.sin(G.elapsed * 5) * 1.2;
-  g.save();
-  g.translate(mx, my);
-  g.rotate(Math.PI / 4);
-  g.fillStyle = obj.kind === 'giver' ? '#57d7e8' : '#ffb340';
-  g.strokeStyle = 'rgba(0,0,0,0.45)';
-  g.fillRect(-r / 1.6, -r / 1.6, r * 1.25, r * 1.25);
-  g.strokeRect(-r / 1.6, -r / 1.6, r * 1.25, r * 1.25);
-  g.restore();
-  return { x: mx, y: my, obj };
+function drawPlayerArrow(ctx, x, y, heading, scale) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(-heading);
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#20303c';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(0, -8 * scale);
+  ctx.lineTo(5.4 * scale, 6.4 * scale);
+  ctx.lineTo(0, 3.4 * scale);
+  ctx.lineTo(-5.4 * scale, 6.4 * scale);
+  ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  ctx.restore();
 }
 
-function drawPlayerArrow(g, mx, my, heading, scale = 1) {
-  g.save();
-  g.translate(mx, my);
-  g.rotate(Math.PI - heading);
-  g.fillStyle = '#ffffff';
-  g.strokeStyle = 'rgba(0,0,0,0.65)';
-  g.lineWidth = 1.2;
-  g.beginPath();
-  g.moveTo(0, -7 * scale); g.lineTo(4.6 * scale, 5.5 * scale);
-  g.lineTo(0, 2.6 * scale); g.lineTo(-4.6 * scale, 5.5 * scale);
-  g.closePath(); g.fill(); g.stroke();
-  g.restore();
+function drawObjective(ctx, x, y, scale) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(Math.PI / 4);
+  ctx.fillStyle = '#ffb340';
+  ctx.strokeStyle = '#7a4a08';
+  ctx.lineWidth = 1.2;
+  const s = 5.6 * scale;
+  ctx.fillRect(-s / 2, -s / 2, s, s);
+  ctx.strokeRect(-s / 2, -s / 2, s, s);
+  ctx.restore();
 }
-
-// ------------------------------------------------------------- the minimap
-const VIEW = 95; // metres from centre to edge
 
 export function drawMinimap() {
-  if (!ctx) return;
-  const p = G.player;
-  const size = canvas.width;
-  const half = size / 2;
-  const pxPerM = half / VIEW;
-
-  ctx.fillStyle = '#16202b';
-  ctx.fillRect(0, 0, size, size);
-  const srcHalf = VIEW * SCALE;
-  const cx = (p.x - WORLD.minX) * SCALE;
-  const cz = (p.z - WORLD.minZ) * SCALE;
-  ctx.drawImage(staticLayer, cx - srcHalf, cz - srcHalf, srcHalf * 2, srcHalf * 2, 0, 0, size, size);
-
-  const toMap = (x, z) => [half + (x - p.x) * pxPerM, half + (z - p.z) * pxPerM];
-  const clampPt = (x, z) => toMap(
-    Math.max(p.x - VIEW + 6, Math.min(p.x + VIEW - 6, x)),
-    Math.max(p.z - VIEW + 6, Math.min(p.z + VIEW - 6, z)));
-
-  drawRoute(ctx, toMap, 2.6);
-  drawBlips(ctx, clampPt, clampPt, false);
-  drawObjective(ctx, toMap, clampPt, false);
-
-  // The player: a soft pulse ring, then the arrow.
-  const pulse = (G.elapsed % 1.6) / 1.6;
-  ctx.strokeStyle = `rgba(255,255,255,${0.55 * (1 - pulse)})`;
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(half, half, 6 + pulse * 9, 0, Math.PI * 2); ctx.stroke();
-  drawPlayerArrow(ctx, half, half, p.heading, 1);
-
-  // North sits at the top of the round map (the blit never rotates), and
-  // saying so on the glass keeps the arrow's swing readable at a glance.
-  ctx.fillStyle = 'rgba(255,248,234,0.85)';
-  ctx.font = '700 11px "Segoe UI", Arial, sans-serif';
+  if (!_miniCtx || !G.player) return;
+  const ctx = _miniCtx;
+  const W = _mini.width, H = _mini.height;
+  const scale = 1.05; // px per metre
+  const px = G.player.x, pz = G.player.z;
+  const toMap = (x, z) => [W / 2 + (x - px) * scale, H / 2 + (z - pz) * scale];
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(W / 2, H / 2, W / 2 - 2, 0, 7);
+  ctx.clip();
+  ctx.fillStyle = '#20303c';
+  ctx.fillRect(0, 0, W, H);
+  paintBase(ctx, toMap, { scale });
+  // Police dots.
+  for (const c of G.cars) {
+    if (c.typeKey !== 'cruiser' || c.dead) continue;
+    const [x, y] = toMap(c.x, c.z);
+    ctx.fillStyle = '#2a7fff';
+    ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill();
+  }
+  const obj = objectivePoint();
+  if (obj) {
+    const [x, y] = toMap(obj.x, obj.z);
+    if (x > -10 && x < W + 10 && y > -10 && y < H + 10) drawObjective(ctx, x, y, 0.9);
+  }
+  ctx.restore();
+  // Compass tick.
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 11px system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('N', half, 15);
+  ctx.fillText('N', W / 2, 14);
+  drawPlayerArrow(ctx, W / 2, H / 2, G.player.heading, 1);
 }
 
-// ------------------------------------------------------------- the big map
+// --- The big map -------------------------------------------------------------
+
+function glyphCircle(ctx, x, y, r, fill, label, labelColor) {
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, 7);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(20,26,34,0.65)';
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+  if (label) {
+    ctx.fillStyle = labelColor || '#ffffff';
+    ctx.font = `bold ${r * 1.15}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, x, y + 0.5);
+  }
+}
+
+function glyphFlag(ctx, x, y, s) {
+  ctx.strokeStyle = '#20303c';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x, y + s); ctx.lineTo(x, y - s); ctx.stroke();
+  const cell = s / 2;
+  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+    ctx.fillStyle = (i + j) % 2 ? '#20303c' : '#ffffff';
+    ctx.fillRect(x + i * cell, y - s + j * cell, cell, cell);
+  }
+}
+
+function glyphAnchor(ctx, x, y, s) {
+  ctx.strokeStyle = '#20506e';
+  ctx.lineWidth = 2.2;
+  ctx.beginPath(); ctx.arc(x, y - s * 0.55, s * 0.28, 0, 7); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x, y - s * 0.3); ctx.lineTo(x, y + s * 0.7);
+  ctx.moveTo(x - s * 0.6, y + s * 0.1); ctx.lineTo(x + s * 0.6, y + s * 0.1);
+  ctx.moveTo(x - s * 0.6, y + s * 0.1); ctx.lineTo(x - s * 0.45, y + s * 0.65);
+  ctx.moveTo(x + s * 0.6, y + s * 0.1); ctx.lineTo(x + s * 0.45, y + s * 0.65);
+  ctx.stroke();
+}
+
+function glyphLighthouse(ctx, x, y, s) {
+  ctx.fillStyle = '#f4f1e8';
+  ctx.beginPath();
+  ctx.moveTo(x - s * 0.4, y + s);
+  ctx.lineTo(x - s * 0.25, y - s * 0.6);
+  ctx.lineTo(x + s * 0.25, y - s * 0.6);
+  ctx.lineTo(x + s * 0.4, y + s);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#c23b2e';
+  ctx.fillRect(x - s * 0.32, y - s * 0.05, s * 0.64, s * 0.3);
+  ctx.fillStyle = '#ffd23e';
+  ctx.beginPath(); ctx.arc(x, y - s * 0.78, s * 0.2, 0, 7); ctx.fill();
+}
+
+function glyphCross(ctx, x, y, s) {
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(x, y, s * 0.95, 0, 7); ctx.fill();
+  ctx.strokeStyle = 'rgba(20,26,34,0.5)'; ctx.lineWidth = 1.2; ctx.stroke();
+  ctx.fillStyle = '#d8402e';
+  ctx.fillRect(x - s * 0.18, y - s * 0.55, s * 0.36, s * 1.1);
+  ctx.fillRect(x - s * 0.55, y - s * 0.18, s * 1.1, s * 0.36);
+}
+
+function glyphShield(ctx, x, y, s) {
+  ctx.fillStyle = '#274b63';
+  ctx.beginPath();
+  ctx.moveTo(x, y - s);
+  ctx.lineTo(x + s * 0.8, y - s * 0.55);
+  ctx.lineTo(x + s * 0.8, y + s * 0.2);
+  ctx.quadraticCurveTo(x + s * 0.8, y + s * 0.8, x, y + s);
+  ctx.quadraticCurveTo(x - s * 0.8, y + s * 0.8, x - s * 0.8, y + s * 0.2);
+  ctx.lineTo(x - s * 0.8, y - s * 0.55);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ffd23e';
+  ctx.font = `bold ${s}px system-ui, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('P', x, y);
+}
+
 export function drawBigMap() {
-  if (!bigCtx) return;
-  const g = bigCtx;
-  const W = bigCanvas.width, H = bigCanvas.height;
-  g.clearRect(0, 0, W, H);
+  if (!_bigCtx) return;
+  const ctx = _bigCtx;
+  const W = _big.width, H = _big.height;
+  const B = CITY_BOUNDS;
+  const pad = 26;
+  const scale = Math.min((W - pad * 2) / (B.maxX - B.minX + 60), (H - pad * 2) / (B.maxZ - B.minZ));
+  const ox = pad + 30 * scale, oy = pad;
+  const toMap = (x, z) => [ox + (x - B.minX) * scale, oy + (z - B.minZ) * scale];
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#1d2733';
+  ctx.fillRect(0, 0, W, H);
+  paintBase(ctx, toMap, { scale });
 
-  // Fit the whole world into the canvas with a margin.
-  const margin = 30;
-  const scale = Math.min((W - margin * 2) / (WORLD.maxX - WORLD.minX), (H - margin * 2) / (WORLD.maxZ - WORLD.minZ));
-  const mapW = (WORLD.maxX - WORLD.minX) * scale;
-  const mapH = (WORLD.maxZ - WORLD.minZ) * scale;
-  const ox = (W - mapW) / 2, oy = (H - mapH) / 2;
-  const toMap = (x, z) => [ox + (x - WORLD.minX) * scale, oy + (z - WORLD.minZ) * scale];
-
-  // The chart itself, with a soft edge shadow.
-  g.save();
-  g.shadowColor = 'rgba(0,0,0,0.55)';
-  g.shadowBlur = 24;
-  g.drawImage(staticLayer, 0, 0, staticLayer.width, staticLayer.height, ox, oy, mapW, mapH);
-  g.restore();
-  g.strokeStyle = 'rgba(255,248,234,0.35)';
-  g.lineWidth = 1.5;
-  g.strokeRect(ox, oy, mapW, mapH);
-
-  // District names, haloed so they sit on any wash.
-  g.textAlign = 'center';
-  g.font = '600 15px "Segoe UI", Arial, sans-serif';
+  // District labels, once each, centred on their rectangles.
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   for (const d of DISTRICTS) {
-    const [mx, my] = toMap((d.minX + d.maxX) / 2, (d.minZ + d.maxZ) / 2);
-    g.lineWidth = 4;
-    g.strokeStyle = 'rgba(10,18,28,0.65)';
+    const [x, y] = toMap((d.minX + d.maxX) / 2, (d.minZ + d.maxZ) / 2);
+    ctx.font = 'bold 15px system-ui, sans-serif';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(24,30,40,0.75)';
     const label = d.name.toUpperCase();
-    g.strokeText(label, mx, my);
-    g.fillStyle = '#fff8ea';
-    g.fillText(label, mx, my);
+    ctx.strokeText(label, x, y);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(label, x, y);
   }
 
-  drawRoute(g, toMap, 3.6);
-  drawBlips(g, toMap, toMap, true);
-
-  // Landmark glyphs: garage wrench-badge, PAPD shield-star, hospital cross.
-  drawBadge(g, toMap(PLACES.garagePad.x, PLACES.garagePad.z), '#e8862e', 'G');
-  drawShield(g, toMap(PLACES.policeStation.x, PLACES.policeStation.z));
-  drawCross(g, toMap(PLACES.hospital.x, PLACES.hospital.z));
-  // The people and places the story actually turns on: Marisol's corner
-  // (her own gold, from story.js), Tito's race lights under a chequered
-  // flag, an anchor on the Marina del Sur docks, and the lighthouse drawn
-  // as a lighthouse where the static layer's dot already marks the point.
-  drawBadge(g, toMap(PLACES.marisolCorner.x, PLACES.marisolCorner.z), '#ffb340', 'M', '#503a08');
-  drawFlag(g, toMap(PLACES.raceStart.x, PLACES.raceStart.z));
-  drawAnchor(g, toMap(PLACES.marinaDock.x, PLACES.marinaDock.z));
-  drawLighthouse(g, toMap(PLACES.lighthouse.x, PLACES.lighthouse.z));
-
-  // The objective diamond + its distance pill.
-  const marker = drawObjective(g, toMap, toMap, true);
+  // Route and its distance pill.
   const route = currentRoute();
-  if (marker && route?.dist) {
-    const label = route.dist >= 1000 ? `${(route.dist / 1000).toFixed(1)} km` : `${Math.round(route.dist)} m`;
-    g.font = '700 13px "Segoe UI", Arial, sans-serif';
-    const tw = g.measureText(label).width + 18;
-    const px = marker.x - tw / 2, py = marker.y - 40;
-    g.fillStyle = 'rgba(10,16,24,0.88)';
-    g.beginPath(); g.roundRect(px, py, tw, 22, 11); g.fill();
-    g.strokeStyle = '#ffb340'; g.lineWidth = 1.2; g.stroke();
-    g.fillStyle = '#ffcf6e';
-    g.fillText(label, marker.x, py + 15);
+  if (route) {
+    ctx.strokeStyle = '#ffb340';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([8, 5]);
+    ctx.beginPath();
+    route.points.forEach((p, i) => {
+      const [x, y] = toMap(p.x, p.z);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const end = route.points[route.points.length - 1];
+    const [ex, ey] = toMap(end.x, end.z);
+    const label = `${route.dist} m`;
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    const tw = ctx.measureText(label).width + 16;
+    ctx.fillStyle = '#141a22';
+    ctx.beginPath();
+    ctx.roundRect(ex - tw / 2, ey + 12, tw, 22, 11);
+    ctx.fill();
+    ctx.fillStyle = '#ffd98a';
+    ctx.fillText(label, ex, ey + 23.5);
+    drawObjective(ctx, ex, ey, 1.1);
   }
 
-  // The player: pulse ring + arrow, larger than life.
-  const [pxx, pyy] = toMap(G.player.x, G.player.z);
-  const pulse = (G.elapsed % 1.6) / 1.6;
-  g.strokeStyle = `rgba(255,255,255,${0.6 * (1 - pulse)})`;
-  g.lineWidth = 2;
-  g.beginPath(); g.arc(pxx, pyy, 8 + pulse * 12, 0, Math.PI * 2); g.stroke();
-  g.strokeStyle = 'rgba(255,255,255,0.9)';
-  g.beginPath(); g.arc(pxx, pyy, 9, 0, Math.PI * 2); g.stroke();
-  drawPlayerArrow(g, pxx, pyy, G.player.heading, 1.35);
+  // POI glyphs from real PLACES.
+  const P = PLACES;
+  const at = (p) => toMap(p.x, p.z);
+  let [x, y] = at(P.marisol);
+  glyphCircle(ctx, x, y, 9, '#e8a33c', 'M', '#3a2a05');
+  [x, y] = at(P.raceStart);
+  glyphFlag(ctx, x, y, 10);
+  [x, y] = at(P.marina);
+  glyphAnchor(ctx, x, y, 10);
+  [x, y] = at(P.lighthouse);
+  glyphLighthouse(ctx, x, y, 10);
+  [x, y] = at(P.garage);
+  glyphCircle(ctx, x, y, 9, '#5a6a76', 'G');
+  [x, y] = at(P.papd);
+  glyphShield(ctx, x, y, 10);
+  [x, y] = at(P.hospital);
+  glyphCross(ctx, x, y, 10);
+  [x, y] = at(P.clockTower);
+  glyphCircle(ctx, x, y, 7, '#e8d9b0', '◷', '#4a3b28');
 
-  // Compass rose, top-right of the chart: a glass disc, a two-tone
-  // needle (red flies north), and the N riding above it.
-  const ccx = ox + mapW - 27, ccy = oy + 31;
-  g.save();
-  g.fillStyle = 'rgba(10,16,24,0.55)';
-  g.beginPath(); g.arc(ccx, ccy, 14, 0, Math.PI * 2); g.fill();
-  g.strokeStyle = 'rgba(255,248,234,0.5)';
-  g.lineWidth = 1;
-  g.stroke();
-  g.beginPath(); g.moveTo(ccx, ccy - 10); g.lineTo(ccx + 3.4, ccy); g.lineTo(ccx - 3.4, ccy); g.closePath();
-  g.fillStyle = '#ff5a3c'; g.fill();
-  g.beginPath(); g.moveTo(ccx, ccy + 10); g.lineTo(ccx + 3.4, ccy); g.lineTo(ccx - 3.4, ccy); g.closePath();
-  g.fillStyle = 'rgba(255,248,234,0.85)'; g.fill();
-  g.fillStyle = '#fff8ea';
-  g.font = '700 10px "Segoe UI", Arial, sans-serif';
-  g.fillText('N', ccx, ccy - 17);
-  g.restore();
-}
-
-function drawBadge(g, [mx, my], color, letter, letterColor = '#ffffff') {
-  g.save();
-  g.fillStyle = color;
-  g.strokeStyle = 'rgba(255,255,255,0.9)';
-  g.lineWidth = 1.4;
-  g.beginPath(); g.arc(mx, my, 8, 0, Math.PI * 2); g.fill(); g.stroke();
-  g.fillStyle = letterColor;
-  g.font = '900 11px Arial, sans-serif';
-  g.textAlign = 'center';
-  g.fillText(letter, mx, my + 4);
-  g.restore();
-}
-
-function drawFlag(g, [mx, my]) {
-  g.save();
-  g.strokeStyle = 'rgba(15,20,26,0.85)';
-  g.lineWidth = 1.6;
-  g.beginPath(); g.moveTo(mx - 5, my + 7); g.lineTo(mx - 5, my - 7); g.stroke();
-  const fw = 11, fh = 8, fx = mx - 5, fy = my - 7, cell = fw / 3;
-  for (let r = 0; r < 2; r += 1) for (let c = 0; c < 3; c += 1) {
-    g.fillStyle = (r + c) % 2 === 0 ? '#20242a' : '#ffffff';
-    g.fillRect(fx + c * cell, fy + r * (fh / 2), cell, fh / 2);
+  // Police dots and the player.
+  for (const c of G.cars) {
+    if (c.typeKey !== 'cruiser' || c.dead) continue;
+    const [cx2, cy2] = toMap(c.x, c.z);
+    ctx.fillStyle = '#e0482e';
+    ctx.beginPath(); ctx.arc(cx2, cy2, 4, 0, 7); ctx.fill();
   }
-  g.strokeStyle = 'rgba(15,20,26,0.65)';
-  g.lineWidth = 1;
-  g.strokeRect(fx, fy, fw, fh);
-  g.restore();
-}
+  if (G.player) {
+    const [px2, py2] = toMap(G.player.x, G.player.z);
+    drawPlayerArrow(ctx, px2, py2, G.player.heading, 1.15);
+  }
 
-function drawAnchor(g, [mx, my]) {
-  g.save();
-  g.fillStyle = '#175d7a';
-  g.strokeStyle = 'rgba(255,255,255,0.9)';
-  g.lineWidth = 1.4;
-  g.beginPath(); g.arc(mx, my, 8, 0, Math.PI * 2); g.fill(); g.stroke();
-  g.strokeStyle = '#ffffff';
-  g.lineWidth = 1.5;
-  g.lineCap = 'round';
-  g.beginPath(); g.arc(mx, my - 4.6, 1.7, 0, Math.PI * 2); g.stroke();
-  g.beginPath();
-  g.moveTo(mx, my - 2.9); g.lineTo(mx, my + 5.4);
-  g.moveTo(mx - 3.4, my - 0.6); g.lineTo(mx + 3.4, my - 0.6);
-  g.moveTo(mx - 4.6, my + 1.8); g.quadraticCurveTo(mx, my + 7.6, mx + 4.6, my + 1.8);
-  g.stroke();
-  g.restore();
-}
+  // Compass rose.
+  const cxr = W - 44, cyr = 44;
+  ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.arc(cxr, cyr, 17, 0, 7); ctx.stroke();
+  ctx.fillStyle = '#ffb340';
+  ctx.beginPath();
+  ctx.moveTo(cxr, cyr - 14); ctx.lineTo(cxr + 4.4, cyr + 2); ctx.lineTo(cxr - 4.4, cyr + 2);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 10px system-ui, sans-serif';
+  ctx.fillText('N', cxr, cyr - 24);
 
-function drawLighthouse(g, [mx, my]) {
-  g.save();
-  const tower = new Path2D();
-  tower.moveTo(mx - 2.4, my - 12); tower.lineTo(mx + 2.4, my - 12);
-  tower.lineTo(mx + 4.2, my); tower.lineTo(mx - 4.2, my);
-  tower.closePath();
-  g.save();
-  g.clip(tower);
-  g.fillStyle = '#ffffff'; g.fillRect(mx - 5, my - 12, 10, 12);
-  g.fillStyle = '#d8402e';
-  g.fillRect(mx - 5, my - 10, 10, 2.6);
-  g.fillRect(mx - 5, my - 5.4, 10, 2.6);
-  g.restore();
-  g.strokeStyle = 'rgba(10,18,28,0.55)';
-  g.lineWidth = 1;
-  g.stroke(tower);
-  g.fillStyle = '#26313d';
-  g.fillRect(mx - 2.8, my - 15.4, 5.6, 3.4);
-  g.fillStyle = '#ffd76a';
-  g.beginPath(); g.arc(mx, my - 13.7, 1.5, 0, Math.PI * 2); g.fill();
-  g.restore();
-}
-
-function drawShield(g, [mx, my]) {
-  g.save();
-  g.fillStyle = '#2b4a73';
-  g.strokeStyle = 'rgba(255,255,255,0.9)';
-  g.lineWidth = 1.4;
-  g.beginPath();
-  g.moveTo(mx, my - 9);
-  g.lineTo(mx + 7.5, my - 6);
-  g.lineTo(mx + 7.5, my + 2);
-  g.quadraticCurveTo(mx + 7.5, my + 8, mx, my + 10.5);
-  g.quadraticCurveTo(mx - 7.5, my + 8, mx - 7.5, my + 2);
-  g.lineTo(mx - 7.5, my - 6);
-  g.closePath(); g.fill(); g.stroke();
-  g.fillStyle = '#ffd23e';
-  g.font = '11px Arial, sans-serif';
-  g.textAlign = 'center';
-  g.fillText('★', mx, my + 3.5);
-  g.restore();
-}
-
-function drawCross(g, [mx, my]) {
-  g.save();
-  g.fillStyle = '#f2f4f4';
-  g.strokeStyle = 'rgba(20,30,40,0.5)';
-  g.lineWidth = 1;
-  g.beginPath(); g.arc(mx, my, 8, 0, Math.PI * 2); g.fill(); g.stroke();
-  g.fillStyle = '#d8402e';
-  g.fillRect(mx - 1.8, my - 5.4, 3.6, 10.8);
-  g.fillRect(mx - 5.4, my - 1.8, 10.8, 3.6);
-  g.restore();
+  // Header district: where the route is taking you.
+  const headEl = document.getElementById('bigmap-district');
+  if (headEl) {
+    const obj = objectivePoint();
+    headEl.textContent = obj ? districtAt(obj.x, obj.z).name.toUpperCase() : (G.district || 'PUERTO ALBA').toUpperCase();
+  }
 }
